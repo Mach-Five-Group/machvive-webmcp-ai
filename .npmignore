@@ -1,0 +1,12 @@
+# Exclude design folder from the published npm package
+design/
+
+# Exclude local configuration and CI tools
+.github/
+.gitignore
+
+# Exclude tests from the published package
+test/
+
+# Agent instructions, not consumer docs
+CLAUDE.md

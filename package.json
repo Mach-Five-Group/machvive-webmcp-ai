@@ -1,0 +1,61 @@
+{
+  "name": "@machfivetechchicago/machvive-webmcp-ai",
+  "version": "5.5.5",
+  "description": "Remember when the Web was fun?",
+  "keywords": [
+    "WebMCP",
+    "MCP",
+    "AI",
+    "Agent",
+    "Web",
+    "Component"
+  ],
+  "homepage": "https://github.com/Mach-Five-Group/machvive-webmcp-ai#readme",
+  "bugs": {
+    "url": "https://github.com/Mach-Five-Group/machvive-webmcp-ai/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mach-Five-Group/machvive-webmcp-ai.git"
+  },
+  "license": "Apache-2.0",
+  "author": "MachFiveTech Chicago",
+  "type": "module",
+  "sideEffects": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./lorum-ipsum": {
+      "types": "./src/wc/machvive-lorum-ipsum/machvive-lorum-ipsum.d.ts",
+      "default": "./src/wc/machvive-lorum-ipsum/machvive-lorum-ipsum.js"
+    },
+    "./webmcp-polyfill": {
+      "types": "./src/wc/machvive-webmcp-polyfill/machvive-webmcp-polyfill.d.ts",
+      "default": "./src/wc/machvive-webmcp-polyfill/machvive-webmcp-polyfill.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "src"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "node --test --import ./test/setup.js \"test/*.test.js\"",
+    "test:watch": "node --test --watch --import ./test/setup.js \"test/*.test.js\"",
+    "prepublishOnly": "npm test"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1"
+  }
+}
