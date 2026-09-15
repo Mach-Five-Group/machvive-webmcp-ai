@@ -1,7 +1,7 @@
 <h1 align="center">machvive-webmcp-ai</h1>
 
 <p align="center">
-  <strong>Remember when the Web was fun?</strong><br>
+  <strong>"I don't want to use your product's agent; I want my agent to be able to use your product."</strong><br>
   Vanilla Web Components that make a page agent-ready — by
   <a href="https://github.com/Mach-Five-Group">MachFiveTech Chicago</a>.
 </p>
@@ -12,6 +12,12 @@
   <img alt="types" src="https://img.shields.io/badge/types-included-blue.svg">
   <img alt="dependencies" src="https://img.shields.io/badge/dependencies-0-brightgreen.svg">
 </p>
+
+WebMCP empowers agents by giving them access to your core business functionality within a safe, semantic sandbox.
+
+A Business Accelerator is a targeted, authoritative, conversion-optimized landing page with automated onboarding that facilitates a non-linear, multi-touch sales cycle. Exposing your Business Accelerators to agents makes perfect sense: it gives agents access to interactive experiences that deliver real business value—not just content.
+
+But if agents are becoming part of your customer journey, you need to understand how they engage with your site. We give you the tools to measure that engagement. Record agent sessions and play them back to see exactly how they navigate, interact, and use your Business Accelerators. This gives you detailed insight into agent behavior—and into the broader ecosystem of agent-driven engagement.
 
 No framework, no build step, no runtime dependencies — just standards-based custom
 elements with Shadow DOM that work anywhere `customElements` does.
@@ -136,6 +142,49 @@ const res: WebmcpToolResult = await navigator.modelContext.callTool('add_to_cart
 ```
 
 Verified against `moduleResolution: "bundler"` and `"node16"` under `--strict`.
+
+## Server-Side Rendering (SSR)
+
+These are browser components. Both classes extend `HTMLElement` at module load — not
+when an element is created — so importing the package on a server, where no DOM
+exists, throws immediately:
+
+```
+ReferenceError: HTMLElement is not defined
+```
+
+This never happens in a browser-only setup like Vite, where `HTMLElement` is always
+present. It comes up only in frameworks that render on the server first — Next.js,
+Nuxt, Astro, SvelteKit, Remix. Import the package from a client-only path instead:
+
+```javascript
+// Next.js (App Router) — mark the component "use client", then import on mount
+'use client';
+import { useEffect } from 'react';
+
+export default function Page() {
+  useEffect(() => { import('@machfivetechchicago/machvive-webmcp-ai'); }, []);
+  return <machvive-lorum-ipsum>Hello</machvive-lorum-ipsum>;
+}
+```
+
+```javascript
+// Nuxt — onMounted only runs in the browser
+onMounted(() => import('@machfivetechchicago/machvive-webmcp-ai'));
+```
+
+```javascript
+// SvelteKit — onMount only runs in the browser
+import { onMount } from 'svelte';
+onMount(() => import('@machfivetechchicago/machvive-webmcp-ai'));
+```
+
+In Astro, put the import in a `<script>` tag — those are client-side by default —
+rather than in the component's frontmatter.
+
+A static top-level `import` will not work in any of these: the module is evaluated
+during the server render, before any browser-only lifecycle hook gets a chance to run.
+Use the dynamic `import()` form shown above.
 
 ## License
 

@@ -46,6 +46,8 @@ Adding a component means touching three places: the component file under `src/wc
 
 All tags are prefixed `machvive-`.
 
+**These modules are browser-only by construction.** `class X extends HTMLElement` is evaluated at module load, so importing any entry point where no DOM exists throws `ReferenceError: HTMLElement is not defined`. That is why the test suite installs jsdom globals via `--import ./test/setup.js` before anything loads, and why [README.md](README.md) documents a client-only import path for SSR frameworks. Don't "fix" this by lazily declaring the classes — self-registration on import is the feature; the constraint is inherent to custom elements.
+
 ## The WebMCP polyfill
 
 [machvive-webmcp-polyfill.js](src/wc/machvive-webmcp-polyfill/machvive-webmcp-polyfill.js) is the one component that does more than render. It shims `navigator.modelContext` per the [W3C WebMCP proposal](https://webmachinelearning.github.io/webmcp/docs/proposal.html) — `registerTool` / `unregisterTool` / `provideContext`, with tool descriptors carrying `name`, `description`, `inputSchema`, and an `execute(params, agent)` handler that resolves to `{ content: [...] }`.
