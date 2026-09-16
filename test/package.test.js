@@ -64,7 +64,11 @@ describe('published tarball', () => {
       'src/wc/machvive-lorum-ipsum/machvive-lorum-ipsum.js',
       'src/wc/machvive-lorum-ipsum/machvive-lorum-ipsum.d.ts',
       'src/wc/machvive-webmcp-polyfill/machvive-webmcp-polyfill.js',
-      'src/wc/machvive-webmcp-polyfill/machvive-webmcp-polyfill.d.ts'
+      'src/wc/machvive-webmcp-polyfill/machvive-webmcp-polyfill.d.ts',
+      'src/wc/machvive-webmcp-inspect/machvive-webmcp-inspect.js',
+      'src/wc/machvive-webmcp-inspect/machvive-webmcp-inspect.d.ts',
+      'src/wc/machvive-webmcp-analytics/machvive-webmcp-analytics.js',
+      'src/wc/machvive-webmcp-analytics/machvive-webmcp-analytics.d.ts'
     ]) {
       assert.ok(files.includes(expected), `${expected} is missing from the tarball`);
     }
@@ -84,7 +88,12 @@ describe('published tarball', () => {
 describe('bulk import', () => {
   test('registers every component tag', async () => {
     await import('../index.js');
-    for (const tag of ['machvive-lorum-ipsum', 'machvive-webmcp-polyfill']) {
+    for (const tag of [
+      'machvive-lorum-ipsum',
+      'machvive-webmcp-polyfill',
+      'machvive-webmcp-inspect',
+      'machvive-webmcp-analytics'
+    ]) {
       assert.ok(customElements.get(tag), `${tag} was not registered`);
     }
   });
@@ -92,9 +101,15 @@ describe('bulk import', () => {
   test('re-exports exactly what index.d.ts declares', async () => {
     const index = await import('../index.js');
     assert.deepEqual(Object.keys(index).sort(), [
+      'CALL_EVENT',
+      'CallLog',
       'MachviveLorumIpsum',
+      'MachviveWebmcpAnalytics',
+      'MachviveWebmcpInspect',
       'MachviveWebmcpPolyfill',
       'TOOLS_CHANGED_EVENT',
+      'callLog',
+      'installAnalytics',
       'installWebmcpPolyfill'
     ]);
 

@@ -59,6 +59,20 @@ Three behaviors to preserve when editing it:
 
 `tools`, `callTool`, and the `machvive-webmcp-change` event (exported as `TOOLS_CHANGED_EVENT`) are **non-standard additions** — the spec defines registration only. They exist because the polyfill is a registry with no transport; bridge code needs a way to discover and invoke. Keep them clearly marked as extensions so they aren't mistaken for spec surface.
 
+## The inspector and analytics components
+
+**[machvive-webmcp-inspect](src/wc/machvive-webmcp-inspect/machvive-webmcp-inspect.js)** builds its form from a tool's `inputSchema` and coerces each control back to the declared JSON type before calling. Both halves matter: a `number` input yields a string, so without `readControl` a tool receives `"3"` where it declared `integer`. It depends on `tools` and `callTool` — our non-standard additions — so it detects a native `modelContext` that lacks them and renders an explanation instead of throwing.
+
+**[machvive-webmcp-analytics](src/wc/machvive-webmcp-analytics/machvive-webmcp-analytics.js)** wraps each tool's `execute` at registration time rather than hooking `callTool`. That choice is load-bearing: handler-level wrapping captures invocations from every caller, including a native implementation and real agents, neither of which pass through our code. Consequences to preserve:
+
+- **It captures the handler's raw return**, not the `{content:[...]}` shape `callTool` normalizes into afterwards. A test pins this.
+- **Tools registered before the module loads cannot be captured** — the polyfill hides handlers from `tools` by design, so there is nothing to re-wrap. The component warns rather than pretending coverage.
+- **Recording must never reach the tool call.** Two independent guards enforce this: a per-listener `catch` in `#changed`, and a `catch` around `log.add` in the wrapper. They are deliberately redundant — a bug that made recording throw once produced a phantom `error` entry for a call that actually succeeded.
+- **`CallLog` does not extend `EventTarget`.** It did, and dispatching a jsdom `CustomEvent` through Node's `EventTarget` threw on the realm mismatch. The hand-rolled listener set is realm-free and works in plain Node.
+- **IndexedDB persistence is async**, so `ready` must be awaited before the first read, and every write is fire-and-forget — storage failing is never allowed to break capture.
+
+Neither component may auto-emit to `window.dataLayer`; that is opt-in via the `datalayer` attribute so importing the module never produces tracking traffic.
+
 ## Publishing
 
 `npm publish` — `prepublishOnly` runs the suite first, so a failing test blocks the release.

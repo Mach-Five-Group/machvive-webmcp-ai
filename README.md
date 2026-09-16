@@ -25,6 +25,8 @@ elements with Shadow DOM that work anywhere `customElements` does.
 | Component | Tag | What it does |
 | --- | --- | --- |
 | WebMCP polyfill | `<machvive-webmcp-polyfill>` | Shims `navigator.modelContext` so a page can expose tools to AI agents |
+| WebMCP inspector | `<machvive-webmcp-inspect>` | Lists registered tools, builds a form from each schema, runs them |
+| WebMCP analytics | `<machvive-webmcp-analytics>` | Captures every tool call for listing, editing, export, replay, and dataLayer |
 | Lorum Ipsum | `<machvive-lorum-ipsum>` | Placeholder copy that projects slotted content |
 
 ## ⚡ Integration with Vite (Vanilla JS)
@@ -126,6 +128,83 @@ const result = await navigator.modelContext.callTool('add_to_cart', { sku: 'M5T-
 `navigator.modelContext.tools` returns the descriptors minus their handlers.
 `callTool` never throws: a handler that rejects comes back as
 `{ content: [...], isError: true }`.
+
+## 🔎 Inspector
+
+`machvive-webmcp-inspect` lists every registered tool, renders a form from its
+`inputSchema`, and executes it with what you type. Values are coerced to the types
+the schema declares — an `integer` field sends `3`, not `"3"` — required fields are
+enforced before anything runs, and `object`/`array` fields accept JSON.
+
+```html
+<!-- inline: renders where you place it -->
+<machvive-webmcp-inspect></machvive-webmcp-inspect>
+
+<!-- floating: docks as an overlay panel with a toggle, no layout impact -->
+<machvive-webmcp-inspect floating></machvive-webmcp-inspect>
+
+<!-- floating and expanded on load -->
+<machvive-webmcp-inspect floating open></machvive-webmcp-inspect>
+```
+
+`show()` and `hide()` drive the panel from script. The list refreshes automatically
+as tools are registered or removed.
+
+## 📊 Analytics
+
+`machvive-webmcp-analytics` captures every WebMCP invocation — params, result,
+duration, and errors — then lets you list, edit, export, replay, or forward them.
+
+```javascript
+import '@machfivetechchicago/machvive-webmcp-ai/webmcp-analytics';
+```
+
+```html
+<machvive-webmcp-analytics></machvive-webmcp-analytics>
+```
+
+**Import it before you register tools.** Capture works by wrapping each tool's
+handler at registration time, so anything registered earlier is invisible to it —
+the component warns in the console when it detects this. Wrapping the handler rather
+than the caller is deliberate: it records invocations from *any* caller, including a
+native `navigator.modelContext` and real agents, neither of which route through this
+library.
+
+Captured calls persist to **IndexedDB**, so a log survives reloads and is not bound
+by the ~5 MB localStorage ceiling. The store degrades to memory-only where IndexedDB
+is unavailable. The default cap is 500 entries, oldest evicted first.
+
+### Working with the log
+
+```javascript
+import { callLog } from '@machfivetechchicago/machvive-webmcp-ai/webmcp-analytics';
+
+await callLog.ready;            // restore from IndexedDB is async
+
+callLog.entries;                // captured calls, oldest first
+callLog.toJSON();               // export as JSON
+callLog.import(json);           // merge a previously exported log
+callLog.update(id, { params }); // edit before replaying
+await callLog.replay(id);                    // re-run as captured
+await callLog.replay(id, { sku: 'OTHER' });  // re-run with edited params
+```
+
+Recording is strictly best-effort: a failure inside the log — a throwing subscriber,
+an unwritable store — can never change a tool's result or make a passing call look
+like it errored.
+
+### Google Tag Manager
+
+Pushing to `window.dataLayer` is **off unless you opt in**, so importing the
+component never emits tracking traffic on its own:
+
+```html
+<machvive-webmcp-analytics datalayer></machvive-webmcp-analytics>
+```
+
+Each call then pushes `{ event: 'webmcp_tool_call', webmcp_tool, webmcp_status,
+webmcp_duration_ms, webmcp_params }`. Without the attribute, push individual entries
+on demand with `callLog.pushToDataLayer(id)` or the per-entry button in the UI.
 
 ## TypeScript
 
