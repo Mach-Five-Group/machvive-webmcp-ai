@@ -368,12 +368,18 @@ export function installAnalytics(log = callLog) {
 }
 
 const STYLES = `
-  :host { display: block; font: 13px/1.5 system-ui, sans-serif; color: #1a1a1a; }
+  /* This widget paints a light palette explicitly. Declaring the scheme keeps
+     UA-rendered parts (controls, scrollbars) light too, instead of the browser
+     handing form controls dark-mode defaults that vanish on these backgrounds. */
+  :host { display: block; font: 13px/1.5 system-ui, sans-serif; color: #1a1a1a;
+          color-scheme: light; }
   :host([hidden]) { display: none; }
   .bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
   .count { font-weight: 600; margin-right: auto; }
-  button { font: inherit; padding: 3px 9px; border: 1px solid #ccc; border-radius: 4px;
-           background: #fff; cursor: pointer; }
+  /* color is required, not decorative: form controls do not inherit it, so
+     without this the UA picks one per theme and white-on-white can result. */
+  button { font: inherit; color: #1a1a1a; padding: 3px 9px; border: 1px solid #ccc;
+           border-radius: 4px; background: #fff; cursor: pointer; }
   button:hover { background: #f2f2f2; }
   button.danger { color: #a01; border-color: #d8a0a0; }
   ol { list-style: none; margin: 0; padding: 0; border: 1px solid #e2e2e2; border-radius: 6px;
@@ -390,8 +396,9 @@ const STYLES = `
   .detail { padding: 8px 10px; background: #fbfbfb; border-top: 1px solid #eee; }
   .detail label { display: block; font-size: 11px; color: #666; margin: 6px 0 2px; }
   textarea { width: 100%; box-sizing: border-box; font-family: ui-monospace, monospace;
-             font-size: 12px; border: 1px solid #ddd; border-radius: 4px; padding: 5px; }
-  pre { margin: 0; padding: 6px; background: #fff; border: 1px solid #eee; border-radius: 4px;
+             font-size: 12px; color: #1a1a1a; background: #fff; border: 1px solid #ddd;
+             border-radius: 4px; padding: 5px; }
+  pre { margin: 0; padding: 6px; color: #1a1a1a; background: #fff; border: 1px solid #eee; border-radius: 4px;
         font-size: 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
   .empty { padding: 20px; text-align: center; color: #888; }
   .err { color: #c5221f; }

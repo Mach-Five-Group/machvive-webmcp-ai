@@ -31,7 +31,11 @@ function readControl(input, schema = {}) {
 }
 
 const STYLES = `
-  :host { display: block; font: 13px/1.5 system-ui, sans-serif; color: #1a1a1a; }
+  /* This widget paints a light palette explicitly. Declaring the scheme keeps
+     UA-rendered parts (controls, scrollbars) light too, instead of the browser
+     handing form controls dark-mode defaults that vanish on these backgrounds. */
+  :host { display: block; font: 13px/1.5 system-ui, sans-serif; color: #1a1a1a;
+          color-scheme: light; }
   :host([hidden]) { display: none; }
 
   /* Floating mode docks the panel without disturbing page layout. */
@@ -44,11 +48,11 @@ const STYLES = `
   :host([floating]) .fab { display: inline-flex; }
   .fab { display: none; align-items: center; gap: 6px; margin-top: 8px; float: right;
          padding: 7px 13px; border-radius: 999px; border: 1px solid #ccc; background: #fff;
-         cursor: pointer; font: inherit; box-shadow: 0 2px 8px rgba(0,0,0,.14); }
+         color: #1a1a1a; cursor: pointer; font: inherit; box-shadow: 0 2px 8px rgba(0,0,0,.14); }
 
   .panel { border: 1px solid #e2e2e2; border-radius: 8px; overflow: hidden; }
   header { display: flex; align-items: center; gap: 8px; padding: 7px 10px;
-           background: #fafafa; border-bottom: 1px solid #eee; font-weight: 600; }
+           background: #fafafa; color: #1a1a1a; border-bottom: 1px solid #eee; font-weight: 600; }
   header .close { margin-left: auto; border: 0; background: none; cursor: pointer;
                   font-size: 16px; line-height: 1; color: #666; }
   :host(:not([floating])) header .close { display: none; }
@@ -56,11 +60,16 @@ const STYLES = `
   .body { display: flex; min-height: 150px; }
   @media (max-width: 520px) { .body { flex-direction: column; } }
 
-  .tools { flex: 0 0 150px; border-right: 1px solid #eee; overflow-y: auto; }
-  @media (max-width: 520px) { .tools { flex: none; border-right: 0; border-bottom: 1px solid #eee; } }
+  .tools { flex: 0 1 auto; min-width: 120px; max-width: 200px;
+           border-right: 1px solid #eee; overflow-y: auto; }
+  @media (max-width: 520px) { .tools { flex: none; max-width: none; border-right: 0;
+                                       border-bottom: 1px solid #eee; } }
+  /* Tool names are arbitrary identifiers; long ones must wrap inside the column
+     rather than spill over the divider. */
   .tools button { display: block; width: 100%; text-align: left; padding: 6px 10px;
-                  border: 0; background: none; cursor: pointer; font: inherit;
-                  font-family: ui-monospace, monospace; border-bottom: 1px solid #f4f4f4; }
+                  border: 0; background: none; color: #1a1a1a; cursor: pointer; font: inherit;
+                  font-family: ui-monospace, monospace; font-size: 12px;
+                  overflow-wrap: anywhere; border-bottom: 1px solid #f4f4f4; }
   .tools button:hover { background: #f6f6f6; }
   .tools button[aria-current="true"] { background: #e8f0fe; font-weight: 600; }
 
@@ -70,14 +79,18 @@ const STYLES = `
   .name { font-family: ui-monospace, monospace; font-size: 12px; }
   .req { color: #c5221f; }
   .hint { color: #888; font-size: 11px; }
+  /* color/background are required, not decorative: form controls do not inherit
+     them, so without these the UA picks per-theme defaults and text can render
+     white on white. */
   input, select, textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 12px;
-                            padding: 4px 6px; border: 1px solid #ddd; border-radius: 4px; }
+                            color: #1a1a1a; background: #fff; padding: 4px 6px;
+                            border: 1px solid #ddd; border-radius: 4px; }
   input[type="checkbox"] { width: auto; }
   textarea { font-family: ui-monospace, monospace; }
-  .run { margin-top: 4px; padding: 5px 14px; border: 1px solid #1a73e8; border-radius: 4px;
-         background: #1a73e8; color: #fff; cursor: pointer; font: inherit; }
+  .run { margin-top: 4px; padding: 5px 14px; border: 1px solid #1565c0; border-radius: 4px;
+         background: #1565c0; color: #fff; cursor: pointer; font: inherit; }
   .run:disabled { opacity: .6; cursor: default; }
-  pre { margin: 8px 0 0; padding: 7px; background: #fafafa; border: 1px solid #eee;
+  pre { margin: 8px 0 0; padding: 7px; color: #1a1a1a; background: #fafafa; border: 1px solid #eee;
         border-radius: 4px; font-size: 12px; white-space: pre-wrap; word-break: break-word;
         max-height: 180px; overflow: auto; }
   pre.error { background: #fce8e6; border-color: #f5c6c2; color: #c5221f; }
