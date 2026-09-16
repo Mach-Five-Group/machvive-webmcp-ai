@@ -29,6 +29,8 @@ elements with Shadow DOM that work anywhere `customElements` does.
 | WebMCP analytics | `<machvive-webmcp-analytics>` | Captures every tool call for listing, editing, export, replay, and dataLayer |
 | Lorum Ipsum | `<machvive-lorum-ipsum>` | Placeholder copy that projects slotted content |
 
+<img width="1098" height="894" alt="m5t_machvive_ai_webmcp" src="https://github.com/user-attachments/assets/a1433ff0-f8a9-46fb-ad59-735aed155ff8" />
+
 ## ⚡ Integration with Vite (Vanilla JS)
 
 This package is optimized for modern ESM environments like Vite. You can import individual components or the entire library at once.
