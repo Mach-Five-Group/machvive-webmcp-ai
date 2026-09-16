@@ -13,6 +13,7 @@
 // exactly what capturing every call requires — finds no registry to instrument
 // and silently captures nothing.
 import '../machvive-webmcp-polyfill/machvive-webmcp-polyfill.js';
+import { THEME_CSS } from '../shared/theme.js';
 
 export const CALL_EVENT = 'machvive-webmcp-call';
 export const DB_NAME = 'machvive-webmcp';
@@ -368,40 +369,45 @@ export function installAnalytics(log = callLog) {
 }
 
 const STYLES = `
-  /* This widget paints a light palette explicitly. Declaring the scheme keeps
-     UA-rendered parts (controls, scrollbars) light too, instead of the browser
-     handing form controls dark-mode defaults that vanish on these backgrounds. */
-  :host { display: block; font: 13px/1.5 system-ui, sans-serif; color: #1a1a1a;
-          color-scheme: light; }
+  ${THEME_CSS}
+
+  /* Painting the background is not optional: this component sets its own text
+     colour per theme, so it cannot rely on inheriting a compatible surface from
+     whatever page embeds it. */
+  :host { display: block; font: 13px/1.5 system-ui, sans-serif;
+          color: var(--mv-fg); background: var(--mv-bg); }
   :host([hidden]) { display: none; }
   .bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
   .count { font-weight: 600; margin-right: auto; }
   /* color is required, not decorative: form controls do not inherit it, so
      without this the UA picks one per theme and white-on-white can result. */
-  button { font: inherit; color: #1a1a1a; padding: 3px 9px; border: 1px solid #ccc;
-           border-radius: 4px; background: #fff; cursor: pointer; }
-  button:hover { background: #f2f2f2; }
-  button.danger { color: #a01; border-color: #d8a0a0; }
-  ol { list-style: none; margin: 0; padding: 0; border: 1px solid #e2e2e2; border-radius: 6px;
-       max-height: 380px; overflow-y: auto; }
-  li { border-bottom: 1px solid #eee; }
+  button { font: inherit; color: var(--mv-fg); padding: 3px 9px;
+           border: 1px solid var(--mv-control-border); border-radius: 4px;
+           background: var(--mv-bg); cursor: pointer; }
+  button:hover { background: var(--mv-hover); }
+  button.danger { color: var(--mv-danger); border-color: var(--mv-danger-border); }
+  ol { list-style: none; margin: 0; padding: 0; border: 1px solid var(--mv-border);
+       border-radius: 6px; max-height: 380px; overflow-y: auto; background: var(--mv-bg); }
+  li { border-bottom: 1px solid var(--mv-border-soft); }
   li:last-child { border-bottom: 0; }
   .row { display: flex; gap: 8px; align-items: center; padding: 6px 10px; cursor: pointer; }
-  .row:hover { background: #fafafa; }
+  .row:hover { background: var(--mv-hover); }
   .tool { font-family: ui-monospace, monospace; font-weight: 600; }
   .status { font-size: 11px; padding: 1px 6px; border-radius: 10px; }
-  .status.ok { background: #e6f4ea; color: #137333; }
-  .status.error { background: #fce8e6; color: #c5221f; }
-  .ms { color: #777; font-size: 11px; margin-left: auto; }
-  .detail { padding: 8px 10px; background: #fbfbfb; border-top: 1px solid #eee; }
-  .detail label { display: block; font-size: 11px; color: #666; margin: 6px 0 2px; }
+  .status.ok { background: var(--mv-ok-bg); color: var(--mv-ok-fg); }
+  .status.error { background: var(--mv-err-bg); color: var(--mv-err-fg); }
+  .ms { color: var(--mv-muted); font-size: 11px; margin-left: auto; }
+  .detail { padding: 8px 10px; background: var(--mv-surface);
+            border-top: 1px solid var(--mv-border-soft); }
+  .detail label { display: block; font-size: 11px; color: var(--mv-muted); margin: 6px 0 2px; }
   textarea { width: 100%; box-sizing: border-box; font-family: ui-monospace, monospace;
-             font-size: 12px; color: #1a1a1a; background: #fff; border: 1px solid #ddd;
-             border-radius: 4px; padding: 5px; }
-  pre { margin: 0; padding: 6px; color: #1a1a1a; background: #fff; border: 1px solid #eee; border-radius: 4px;
+             font-size: 12px; color: var(--mv-fg); background: var(--mv-input-bg);
+             border: 1px solid var(--mv-control-border); border-radius: 4px; padding: 5px; }
+  pre { margin: 0; padding: 6px; color: var(--mv-fg); background: var(--mv-bg);
+        border: 1px solid var(--mv-border-soft); border-radius: 4px;
         font-size: 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
-  .empty { padding: 20px; text-align: center; color: #888; }
-  .err { color: #c5221f; }
+  .empty { padding: 20px; text-align: center; color: var(--mv-faint); }
+  .err { color: var(--mv-err-fg); }
 `;
 
 export class MachviveWebmcpAnalytics extends HTMLElement {
@@ -410,7 +416,7 @@ export class MachviveWebmcpAnalytics extends HTMLElement {
   #onChange = () => this.#render();
 
   static get observedAttributes() {
-    return ['datalayer'];
+    return ['datalayer', 'theme'];
   }
 
   constructor() {
@@ -431,6 +437,17 @@ export class MachviveWebmcpAnalytics extends HTMLElement {
   disconnectedCallback() {
     this.#log.removeEventListener('change', this.#onChange);
     globalThis.window.removeEventListener(CALL_EVENT, this.#maybeAutoPush);
+  }
+
+
+  /** Forces a palette regardless of the OS preference. null follows the OS. */
+  get theme() {
+    return this.getAttribute('theme');
+  }
+
+  set theme(value) {
+    if (value == null) this.removeAttribute('theme');
+    else this.setAttribute('theme', value);
   }
 
   /** The shared call log, for page code that wants direct access. */

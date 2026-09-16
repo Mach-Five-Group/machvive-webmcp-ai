@@ -208,6 +208,52 @@ Each call then pushes `{ event: 'webmcp_tool_call', webmcp_tool, webmcp_status,
 webmcp_duration_ms, webmcp_params }`. Without the attribute, push individual entries
 on demand with `callLog.pushToDataLayer(id)` or the per-entry button in the UI.
 
+## 🌓 Theming
+
+The UI components follow the viewer's OS preference automatically — no
+configuration, no flash of the wrong palette. Set `theme` to override:
+
+```html
+<machvive-webmcp-inspect></machvive-webmcp-inspect>              <!-- follows the OS -->
+<machvive-webmcp-analytics theme="dark"></machvive-webmcp-analytics>
+<machvive-webmcp-inspect theme="light"></machvive-webmcp-inspect>
+```
+
+`theme` is also a reflected property, so `el.theme = 'dark'` and
+`el.theme = null` (back to following the OS) work from script.
+
+### Overriding the palette
+
+Colors are CSS custom properties on the host. Custom properties inherit *through*
+shadow boundaries where ordinary styles do not, so you can restyle the components
+from your own stylesheet without `::part` or `!important`:
+
+```css
+machvive-webmcp-inspect,
+machvive-webmcp-analytics {
+  --mv-accent: #7c3aed;
+  --mv-bg: #ffffff;
+  --mv-fg: #111827;
+  --mv-border: #e5e7eb;
+}
+```
+
+Every token has both a light and a dark value; overriding one replaces it in both
+themes unless you scope your override inside your own media query.
+
+| Token | Role |
+| --- | --- |
+| `--mv-fg` / `--mv-muted` / `--mv-faint` | Text: primary, secondary, hints |
+| `--mv-bg` / `--mv-surface` / `--mv-input-bg` | Panel, raised areas, form fields |
+| `--mv-border` / `--mv-border-soft` / `--mv-control-border` | Outlines, dividers, controls |
+| `--mv-hover` / `--mv-selected` | Interactive states |
+| `--mv-accent` / `--mv-accent-fg` | Primary button |
+| `--mv-ok-bg` / `--mv-ok-fg` / `--mv-err-bg` / `--mv-err-fg` | Status badges |
+| `--mv-danger` / `--mv-danger-border` | Destructive actions |
+
+Every combination of OS preference and `theme` is verified to meet WCAG AA
+(≥ 4.5:1) across the full UI. If you override tokens, re-check your own contrast.
+
 ## TypeScript
 
 Declarations ship with the package — no `@types/*` needed. Importing a component

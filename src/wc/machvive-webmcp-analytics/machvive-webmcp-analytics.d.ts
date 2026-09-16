@@ -68,6 +68,8 @@ export function installAnalytics(log?: CallLog): boolean;
 
 export class MachviveWebmcpAnalytics extends HTMLElement {
   readonly log: CallLog;
+  /** Forces a palette regardless of the OS preference. null follows the OS. */
+  theme: 'light' | 'dark' | null;
 }
 
 declare global {

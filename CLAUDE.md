@@ -73,6 +73,17 @@ Three behaviors to preserve when editing it:
 
 Neither component may auto-emit to `window.dataLayer`; that is opt-in via the `datalayer` attribute so importing the module never produces tracking traffic.
 
+## Theming
+
+[shared/theme.js](src/wc/shared/theme.js) holds the only copy of the palette; both UI components interpolate `THEME_CSS` at the top of their stylesheet. Rules to keep:
+
+- **Cascade order is load-bearing.** Light tokens on bare `:host`, then the `prefers-color-scheme: dark` block guarded by `:host(:not([theme="light"]))`, then `:host([theme="dark"])` *after* the media query so an explicit choice wins in a light OS. A test asserts that ordering.
+- **A component that themes its own text must paint its own background.** Analytics once set a light `color` under a dark theme without a `background`, so inside a light page its text rendered at 1.21:1 — light on light. `:host` now paints `var(--mv-bg)`; the floating inspector is the deliberate exception, staying transparent because its `.panel` and `.fab` paint themselves.
+- **No hardcoded hex outside the token blocks.** A test strips `THEME_CSS` from each component's stylesheet and fails on any remaining literal.
+- **`color-scheme: light dark`** must stay declared, or the browser paints light scrollbars, select popups and checkboxes onto a dark panel.
+
+Contrast is not something to eyeball. `design/webmcp-playground` measures WCAG ratios across all six OS-preference × `theme` combinations; that audit is what caught `--mv-faint: #888` sitting at 3.54:1 on white, which had already shipped.
+
 ## Publishing
 
 `npm publish` — `prepublishOnly` runs the suite first, so a failing test blocks the release.

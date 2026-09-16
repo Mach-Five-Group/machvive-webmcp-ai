@@ -9,6 +9,7 @@
  * invocation (`callTool`) are additions the bare spec does not provide.
  */
 import { TOOLS_CHANGED_EVENT } from '../machvive-webmcp-polyfill/machvive-webmcp-polyfill.js';
+import { THEME_CSS } from '../shared/theme.js';
 
 /** Reads a form control back as the JSON type its schema calls for. */
 function readControl(input, schema = {}) {
@@ -31,71 +32,78 @@ function readControl(input, schema = {}) {
 }
 
 const STYLES = `
-  /* This widget paints a light palette explicitly. Declaring the scheme keeps
-     UA-rendered parts (controls, scrollbars) light too, instead of the browser
-     handing form controls dark-mode defaults that vanish on these backgrounds. */
-  :host { display: block; font: 13px/1.5 system-ui, sans-serif; color: #1a1a1a;
-          color-scheme: light; }
+  ${THEME_CSS}
+
+  /* See analytics: a component that themes its own text must paint its own
+     surface rather than assume the embedding page supplies a matching one. */
+  :host { display: block; font: 13px/1.5 system-ui, sans-serif;
+          color: var(--mv-fg); background: var(--mv-bg); }
   :host([hidden]) { display: none; }
 
   /* Floating mode docks the panel without disturbing page layout. */
+  /* Floating mode is a detached panel: the .panel and .fab paint themselves, so
+     the host must stay transparent or it draws a block over the page. */
   :host([floating]) { position: fixed; right: 16px; bottom: 16px; z-index: 2147483000;
-                      display: block; width: auto; }
+                      display: block; width: auto; background: transparent; }
   :host([floating]) .panel { display: none; width: min(420px, calc(100vw - 32px));
                              max-height: min(70vh, 560px); overflow: auto;
-                             box-shadow: 0 8px 28px rgba(0,0,0,.18); background: #fff; }
+                             box-shadow: 0 8px 28px var(--mv-shadow); background: var(--mv-bg); }
   :host([floating][open]) .panel { display: block; }
   :host([floating]) .fab { display: inline-flex; }
   .fab { display: none; align-items: center; gap: 6px; margin-top: 8px; float: right;
-         padding: 7px 13px; border-radius: 999px; border: 1px solid #ccc; background: #fff;
-         color: #1a1a1a; cursor: pointer; font: inherit; box-shadow: 0 2px 8px rgba(0,0,0,.14); }
+         padding: 7px 13px; border-radius: 999px; border: 1px solid var(--mv-control-border);
+         background: var(--mv-bg); color: var(--mv-fg); cursor: pointer; font: inherit;
+         box-shadow: 0 2px 8px var(--mv-shadow); }
 
-  .panel { border: 1px solid #e2e2e2; border-radius: 8px; overflow: hidden; }
+  .panel { border: 1px solid var(--mv-border); border-radius: 8px; overflow: hidden;
+           background: var(--mv-bg); }
   header { display: flex; align-items: center; gap: 8px; padding: 7px 10px;
-           background: #fafafa; color: #1a1a1a; border-bottom: 1px solid #eee; font-weight: 600; }
+           background: var(--mv-surface); color: var(--mv-fg);
+           border-bottom: 1px solid var(--mv-border-soft); font-weight: 600; }
   header .close { margin-left: auto; border: 0; background: none; cursor: pointer;
-                  font-size: 16px; line-height: 1; color: #666; }
+                  font-size: 16px; line-height: 1; color: var(--mv-muted); }
   :host(:not([floating])) header .close { display: none; }
 
   .body { display: flex; min-height: 150px; }
   @media (max-width: 520px) { .body { flex-direction: column; } }
 
   .tools { flex: 0 1 auto; min-width: 120px; max-width: 200px;
-           border-right: 1px solid #eee; overflow-y: auto; }
+           border-right: 1px solid var(--mv-border-soft); overflow-y: auto; }
   @media (max-width: 520px) { .tools { flex: none; max-width: none; border-right: 0;
-                                       border-bottom: 1px solid #eee; } }
+                                       border-bottom: 1px solid var(--mv-border-soft); } }
   /* Tool names are arbitrary identifiers; long ones must wrap inside the column
      rather than spill over the divider. */
   .tools button { display: block; width: 100%; text-align: left; padding: 6px 10px;
-                  border: 0; background: none; color: #1a1a1a; cursor: pointer; font: inherit;
-                  font-family: ui-monospace, monospace; font-size: 12px;
-                  overflow-wrap: anywhere; border-bottom: 1px solid #f4f4f4; }
-  .tools button:hover { background: #f6f6f6; }
-  .tools button[aria-current="true"] { background: #e8f0fe; font-weight: 600; }
+                  border: 0; background: none; color: var(--mv-fg); cursor: pointer;
+                  font: inherit; font-family: ui-monospace, monospace; font-size: 12px;
+                  overflow-wrap: anywhere; border-bottom: 1px solid var(--mv-border-soft); }
+  .tools button:hover { background: var(--mv-hover); }
+  .tools button[aria-current="true"] { background: var(--mv-selected); font-weight: 600; }
 
   .form { flex: 1; padding: 10px; min-width: 0; }
-  .desc { color: #666; margin: 0 0 8px; }
+  .desc { color: var(--mv-muted); margin: 0 0 8px; }
   label { display: block; margin-bottom: 7px; }
   .name { font-family: ui-monospace, monospace; font-size: 12px; }
-  .req { color: #c5221f; }
-  .hint { color: #888; font-size: 11px; }
+  .req { color: var(--mv-err-fg); }
+  .hint { color: var(--mv-faint); font-size: 11px; }
   /* color/background are required, not decorative: form controls do not inherit
      them, so without these the UA picks per-theme defaults and text can render
      white on white. */
   input, select, textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 12px;
-                            color: #1a1a1a; background: #fff; padding: 4px 6px;
-                            border: 1px solid #ddd; border-radius: 4px; }
+                            color: var(--mv-fg); background: var(--mv-input-bg); padding: 4px 6px;
+                            border: 1px solid var(--mv-control-border); border-radius: 4px; }
   input[type="checkbox"] { width: auto; }
   textarea { font-family: ui-monospace, monospace; }
-  .run { margin-top: 4px; padding: 5px 14px; border: 1px solid #1565c0; border-radius: 4px;
-         background: #1565c0; color: #fff; cursor: pointer; font: inherit; }
+  .run { margin-top: 4px; padding: 5px 14px; border: 1px solid var(--mv-accent);
+         border-radius: 4px; background: var(--mv-accent); color: var(--mv-accent-fg);
+         cursor: pointer; font: inherit; }
   .run:disabled { opacity: .6; cursor: default; }
-  pre { margin: 8px 0 0; padding: 7px; color: #1a1a1a; background: #fafafa; border: 1px solid #eee;
-        border-radius: 4px; font-size: 12px; white-space: pre-wrap; word-break: break-word;
-        max-height: 180px; overflow: auto; }
-  pre.error { background: #fce8e6; border-color: #f5c6c2; color: #c5221f; }
-  .field-error { color: #c5221f; font-size: 11px; }
-  .empty { padding: 20px; text-align: center; color: #888; }
+  pre { margin: 8px 0 0; padding: 7px; color: var(--mv-fg); background: var(--mv-surface);
+        border: 1px solid var(--mv-border-soft); border-radius: 4px; font-size: 12px;
+        white-space: pre-wrap; word-break: break-word; max-height: 180px; overflow: auto; }
+  pre.error { background: var(--mv-err-bg); border-color: var(--mv-err-border); color: var(--mv-err-fg); }
+  .field-error { color: var(--mv-err-fg); font-size: 11px; }
+  .empty { padding: 20px; text-align: center; color: var(--mv-faint); }
 `;
 
 export class MachviveWebmcpInspect extends HTMLElement {
@@ -104,7 +112,7 @@ export class MachviveWebmcpInspect extends HTMLElement {
   #onToolsChanged = () => this.#render();
 
   static get observedAttributes() {
-    return ['floating', 'open'];
+    return ['floating', 'open', 'theme'];
   }
 
   constructor() {
@@ -124,6 +132,17 @@ export class MachviveWebmcpInspect extends HTMLElement {
 
   attributeChangedCallback() {
     if (this.shadowRoot?.getElementById('root')) this.#render();
+  }
+
+
+  /** Forces a palette regardless of the OS preference. null follows the OS. */
+  get theme() {
+    return this.getAttribute('theme');
+  }
+
+  set theme(value) {
+    if (value == null) this.removeAttribute('theme');
+    else this.setAttribute('theme', value);
   }
 
   /** Opens the panel (floating mode only). */
