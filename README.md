@@ -11,6 +11,7 @@
   <a href="LICENSE"><img alt="license" src="https://img.shields.io/npm/l/@machfivetechchicago/machvive-webmcp-ai.svg"></a>
   <img alt="types" src="https://img.shields.io/badge/types-included-blue.svg">
   <img alt="dependencies" src="https://img.shields.io/badge/dependencies-0-brightgreen.svg">
+  <a href="https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/Machvive-WebMCP-Polyfill-Web-Component-Lib"><img alt="docs" src="https://img.shields.io/badge/docs-wiki-blue.svg"></a>
 </p>
 
 WebMCP empowers agents by giving them access to your core business functionality within a safe, semantic sandbox.
@@ -28,6 +29,10 @@ elements with Shadow DOM that work anywhere `customElements` does.
 | WebMCP inspector | `<machvive-webmcp-inspect>` | Lists registered tools, builds a form from each schema, runs them |
 | WebMCP analytics | `<machvive-webmcp-analytics>` | Captures every tool call for listing, editing, export, replay, and dataLayer |
 | Lorum Ipsum | `<machvive-lorum-ipsum>` | Placeholder copy that projects slotted content |
+
+📖 **[Read the full guide on the Wiki](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/Machvive-WebMCP-Polyfill-Web-Component-Lib)** — what WebMCP is and why it beats
+scripted clicking, how the components compose, and the constraints worth knowing
+before you adopt.
 
 <img width="1098" height="894" alt="m5t_machvive_ai_webmcp" src="https://github.com/user-attachments/assets/a1433ff0-f8a9-46fb-ad59-735aed155ff8" />
 
@@ -312,6 +317,11 @@ rather than in the component's frontmatter.
 A static top-level `import` will not work in any of these: the module is evaluated
 during the server render, before any browser-only lifecycle hook gets a chance to run.
 Use the dynamic `import()` form shown above.
+
+## Documentation
+
+Full guide, architecture notes, and adoption constraints live on the
+**[project Wiki](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/Machvive-WebMCP-Polyfill-Web-Component-Lib)**.
 
 ## License
 
