@@ -321,7 +321,7 @@ Use the dynamic `import()` form shown above.
 ## Documentation
 
 Full guide, architecture notes, and adoption constraints live on the
-**[project Wiki](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/Machvive-WebMCP-Polyfill-Web-Component-Lib)**.
+**[project Wiki](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki)**.
 
 ## License
 
