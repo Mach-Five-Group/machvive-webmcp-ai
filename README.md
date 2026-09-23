@@ -259,6 +259,22 @@ themes unless you scope your override inside your own media query.
 Every combination of OS preference and `theme` is verified to meet WCAG AA
 (≥ 4.5:1) across the full UI. If you override tokens, re-check your own contrast.
 
+## 🤖 Claude Code skill
+
+If you build with [Claude Code](https://claude.com/claude-code), install the
+companion skill so Claude knows how to use these components — the API, and the
+constraints that quietly break integrations:
+
+```
+/plugin marketplace add Mach-Five-Group/machvive-webmcp-ai
+/plugin install machvive-webmcp@machvive
+```
+
+Claude then knows to import analytics before registering tools, that the polyfill
+needs a secure context, that a top-level import breaks under SSR, and that
+`sideEffects: false` silently drops the component registrations — the four things
+that fail in ways that look like something else.
+
 ## TypeScript
 
 Declarations ship with the package — no `@types/*` needed. Importing a component

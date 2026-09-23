@@ -1,23 +1,41 @@
 {
   "name": "machvive",
-  "owner": { "name": "MachFiveTech Chicago", "url": "https://github.com/Mach-Five-Group" },
+  "owner": {
+    "name": "MachFiveTech Chicago",
+    "url": "https://github.com/Mach-Five-Group"
+  },
   "description": "Claude Code plugins for the MachVive toolkit.",
   "version": "1.0.0",
-  "metadata": { "pluginRoot": "./plugins" },
+  "metadata": {
+    "pluginRoot": "./plugins"
+  },
   "plugins": [
     {
       "name": "machvive-webmcp",
       "displayName": "MachVive WebMCP",
       "source": "./plugins/machvive-webmcp",
-      "description": "Build agent-callable web pages with the machvive WebMCP components — tool registration via navigator.modelContext, plus the inspector and analytics components.",
-      "version": "5.7.1",
-      "author": { "name": "MachFiveTech Chicago", "url": "https://github.com/Mach-Five-Group" },
+      "description": "Build agent-callable web pages with the machvive WebMCP components \u2014 tool registration via navigator.modelContext, plus the inspector and analytics components.",
+      "version": "1.0.0",
+      "author": {
+        "name": "MachFiveTech Chicago",
+        "url": "https://github.com/Mach-Five-Group"
+      },
       "homepage": "https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/Machvive-WebMCP-Polyfill-Web-Component-Lib",
       "repository": "https://github.com/Mach-Five-Group/machvive-webmcp-ai",
       "license": "Apache-2.0",
-      "keywords": ["webmcp", "mcp", "ai", "agent", "web-components"],
+      "keywords": [
+        "webmcp",
+        "mcp",
+        "ai",
+        "agent",
+        "web-components"
+      ],
       "category": "development",
-      "tags": ["webmcp", "web-components", "ai-agents"]
+      "tags": [
+        "webmcp",
+        "web-components",
+        "ai-agents"
+      ]
     }
   ]
 }

@@ -112,7 +112,7 @@ plugins/machvive-webmcp/
 Users install with `/plugin marketplace add Mach-Five-Group/machvive-webmcp-ai` then `/plugin install machvive-webmcp@machvive`.
 
 - **Claude Code does not scan `node_modules`.** Shipping the skill in the npm tarball would give consumers nothing; the plugin route is the only one with real discovery. The `files` allowlist already keeps `plugins/` out of the tarball — leave it that way.
-- **Two versions to keep in sync.** `plugin.json` and the marketplace entry both carry a `version` that currently tracks the npm version. If the skill's guidance changes, bump it, or installed copies stay stale.
+- **The plugin versions independently of the package.** `plugin.json` and the marketplace entry carry their own semver, bumped when the *skill's guidance* changes — not when the package ships. Tying them to the npm version would force a reinstall for every user on releases the skill does not describe. Both files must be bumped together.
 - **The SKILL.md restates constraints documented here.** When a constraint changes — import order, secure context, SSR, `sideEffects` — update the skill too, or it will teach something that is no longer true.
 
 ## Excluded from the repo
