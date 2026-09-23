@@ -98,6 +98,23 @@ Things that will break a publish or a consumer, all currently satisfied — keep
 
 Publishing also needs `npm login`, and the `@machfivetechchicago` scope must be a user scope or an org the publisher belongs to. `publishConfig.access` is already `public`, which scoped public packages require.
 
+## Claude Code plugin
+
+The repo doubles as a plugin marketplace so consumers can install a skill that teaches Claude to use these components:
+
+```
+.claude-plugin/marketplace.json          # marketplace manifest, must be at repo root
+plugins/machvive-webmcp/
+  .claude-plugin/plugin.json
+  skills/machvive-webmcp/SKILL.md
+```
+
+Users install with `/plugin marketplace add Mach-Five-Group/machvive-webmcp-ai` then `/plugin install machvive-webmcp@machvive`.
+
+- **Claude Code does not scan `node_modules`.** Shipping the skill in the npm tarball would give consumers nothing; the plugin route is the only one with real discovery. The `files` allowlist already keeps `plugins/` out of the tarball — leave it that way.
+- **Two versions to keep in sync.** `plugin.json` and the marketplace entry both carry a `version` that currently tracks the npm version. If the skill's guidance changes, bump it, or installed copies stay stale.
+- **The SKILL.md restates constraints documented here.** When a constraint changes — import order, secure context, SSR, `sideEffects` — update the skill too, or it will teach something that is no longer true.
+
 ## Excluded from the repo
 
 `.gitignore` excludes `design/` (local design assets) and `.env`. The published tarball additionally omits `test/` and this file.

@@ -66,5 +66,8 @@
   "devDependencies": {
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^29.1.1"
+  },
+  "dependencies": {
+    "@machfivetechchicago/machvive-webmcp-ai": "^5.7.1"
   }
 }
