@@ -23,6 +23,8 @@ jobs:
         with:
           node-version: 22
           registry-url: 'https://registry.npmjs.org'
+          # npm recommends disabling the dependency cache for release builds.
+          package-manager-cache: false
 
       # Trusted publishing needs npm 11.5.1+; the runner's bundled npm may be
       # older than that even on current Node.
@@ -45,7 +47,8 @@ jobs:
 
       - run: npm test
 
-      # No NODE_AUTH_TOKEN. Trusted publishing authenticates via OIDC, and npm
-      # generates the provenance attestation automatically — the --provenance
-      # flag is only needed on the token-based path.
-      - run: npm publish --access public
+      # No NODE_AUTH_TOKEN: trusted publishing authenticates over OIDC.
+      # --provenance is passed explicitly rather than relying on trusted
+      # publishing's automatic attestation, which has been reported not to fire
+      # in every case. It is a no-op when the attestation is already generated.
+      - run: npm publish --access public --provenance
