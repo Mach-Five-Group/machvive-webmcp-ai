@@ -34,6 +34,17 @@ describe('package entry points', () => {
     assert.equal(pkg.exports['.'].types, `./${pkg.types}`);
   });
 
+  test('declares no runtime dependencies', () => {
+    // The package is dependency-free by design, and the specific failure this
+    // guards against is a self-reference: an `npm install <this package>` run
+    // with the repo as its working directory adds one silently, and `git add -A`
+    // then ships it. Consumers are unaffected (npm dedupes it) but npmjs.org
+    // renders the package as depending on itself.
+    assert.equal(pkg.dependencies, undefined, `unexpected dependencies: ${JSON.stringify(pkg.dependencies)}`);
+    assert.equal(pkg.peerDependencies, undefined);
+    assert.equal(pkg.optionalDependencies, undefined);
+  });
+
   test('sideEffects is not disabled', () => {
     // Components register via customElements.define() on import. A `false` here
     // lets bundlers drop `import "pkg/lorum-ipsum"` and silently skip the tag.

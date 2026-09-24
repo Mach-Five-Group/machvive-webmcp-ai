@@ -1,6 +1,6 @@
 {
   "name": "@machfivetechchicago/machvive-webmcp-ai",
-  "version": "5.7.2",
+  "version": "5.7.3",
   "description": "I don't want to use your product's agent; I want my agent to be able to use your product.",
   "keywords": [
     "WebMCP",
@@ -66,8 +66,5 @@
   "devDependencies": {
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^29.1.1"
-  },
-  "dependencies": {
-    "@machfivetechchicago/machvive-webmcp-ai": "^5.7.1"
   }
 }
