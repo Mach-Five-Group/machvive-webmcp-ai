@@ -12,6 +12,7 @@
   <img alt="types" src="https://img.shields.io/badge/types-included-blue.svg">
   <img alt="dependencies" src="https://img.shields.io/badge/dependencies-0-brightgreen.svg">
   <a href="https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/Machvive-WebMCP-Polyfill-Web-Component-Lib"><img alt="docs" src="https://img.shields.io/badge/docs-wiki-blue.svg"></a>
+  <a href="https://mach-five-group.github.io/webmcp-playground/"><img alt="live demo" src="https://img.shields.io/badge/demo-live-success.svg"></a>
 </p>
 
 WebMCP empowers agents by giving them access to your core business functionality within a safe, semantic sandbox.
@@ -33,6 +34,11 @@ elements with Shadow DOM that work anywhere `customElements` does.
 📖 **[Read the full guide on the Wiki](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/Machvive-WebMCP-Polyfill-Web-Component-Lib)** — what WebMCP is and why it beats
 scripted clicking, how the components compose, and the constraints worth knowing
 before you adopt.
+
+🎮 **[Try the live playground](https://mach-five-group.github.io/webmcp-playground/)** — a running WebMCP endpoint. Point
+[Browser Use](https://github.com/browser-use/browser-use) or your own agent at it
+and watch it discover and call the page's tools without touching the DOM. Source:
+[webmcp-playground](https://github.com/Mach-Five-Group/webmcp-playground).
 
 <img width="1098" height="894" alt="m5t_machvive_ai_webmcp" src="https://github.com/user-attachments/assets/a1433ff0-f8a9-46fb-ad59-735aed155ff8" />
 
