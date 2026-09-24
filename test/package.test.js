@@ -65,7 +65,13 @@ describe('published tarball', () => {
       cwd: fileURLToPath(root),
       encoding: 'utf8'
     });
-    files = JSON.parse(out)[0].files.map((f) => f.path);
+    // npm 11 reports an array of package objects; npm 12 reports an object keyed
+    // by package name. Accept either, or this test passes locally and fails in
+    // CI purely because the runner has a different npm.
+    const parsed = JSON.parse(out);
+    const entry = Array.isArray(parsed) ? parsed[0] : Object.values(parsed)[0];
+    assert.ok(entry?.files, `unrecognized npm pack --json shape: ${out.slice(0, 120)}`);
+    files = entry.files.map((f) => f.path);
   });
 
   test('ships each entry point and its declarations', () => {
