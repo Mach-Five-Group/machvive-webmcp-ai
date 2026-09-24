@@ -86,7 +86,19 @@ Contrast is not something to eyeball. `design/webmcp-playground` measures WCAG r
 
 ## Publishing
 
-`npm publish` — `prepublishOnly` runs the suite first, so a failing test blocks the release.
+Releases publish from CI, not a laptop. Push a tag and [publish.yml](.github/workflows/publish.yml) does the rest:
+
+```bash
+npm version <patch|minor|major>
+git commit -am "…" && git tag -a v<x.y.z> -m "…"
+git push origin main --follow-tags
+```
+
+The workflow uses **npm trusted publishing** — OIDC, no token anywhere — which also makes npm generate a provenance attestation automatically (the `--provenance` flag is only for the token path). `permissions: id-token: write` is what mints the OIDC token; remove it and publishing fails with no token able to substitute.
+
+Two guards run before the publish: the tag must match `package.json`'s version (a mismatch would publish the wrong version under the right name, which cannot be undone), and the full suite must pass. `prepublishOnly` runs the suite again as a backstop for any local `npm publish`.
+
+The trusted publisher is configured on npmjs.com against this repo **and this workflow filename** — renaming `publish.yml` breaks publishing until the config is updated to match.
 
 Two overlapping mechanisms control tarball contents: the `files` allowlist in `package.json` (authoritative) and [.npmignore](.npmignore) (belt-and-braces). Editing only `.npmignore` will appear to do nothing when the path isn't in `files`. The `published tarball` tests in [package.test.js](test/package.test.js) assert the real `npm pack` output, so drift surfaces there rather than after a release.
 
