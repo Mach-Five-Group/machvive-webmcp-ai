@@ -166,3 +166,49 @@ describe('magnet_status', () => {
     assert.equal(el.captures.length, 1);
   });
 });
+
+describe('scheduling declared as an action, not a step', () => {
+  // Shape taken from a real magnet: its conversational steps collect name and
+  // email, while booking is a mag_action handing off to Microsoft Bookings.
+  const BOOK_ACTION = {
+    type: 'book',
+    value: 'https://outlook.office.com/book/someone@example.com/',
+    config: { source: 'ms_bookings', event_name: '30-min meeting' }
+  };
+
+  test('reports it can schedule even with no booking step', async () => {
+    installRuntime([SELECT, EMAIL, MESSAGE], { mag_actions: [BOOK_ACTION, { type: 'chat' }] });
+    await mount();
+    const d = text(await call('magnet_describe'));
+    assert.match(d, /can schedule "30-min meeting" via ms_bookings/);
+    assert.doesNotMatch(d, /cannot schedule/);
+  });
+
+  test('still says the visitor books it, not the agent', async () => {
+    installRuntime([SELECT, EMAIL, MESSAGE], { mag_actions: [BOOK_ACTION] });
+    await mount();
+    assert.match(text(await call('magnet_describe')), /cannot book on their behalf/);
+  });
+
+  test('lists other entry points so the agent knows what exists', async () => {
+    installRuntime([SELECT, EMAIL, MESSAGE], { mag_actions: [BOOK_ACTION, { type: 'chat' }] });
+    await mount();
+    assert.match(text(await call('magnet_describe')), /Entry points: chat/);
+  });
+
+  test('a chat-only magnet still reports it cannot schedule', async () => {
+    installRuntime([SELECT, EMAIL, MESSAGE], { mag_actions: [{ type: 'chat' }] });
+    await mount();
+    assert.match(text(await call('magnet_describe')), /cannot schedule a meeting/);
+  });
+
+  test('binds to the instance when the magnet declares no mag_id', async () => {
+    // The runtime stores id as null in that case; undefined !== null would miss.
+    const magnet = installRuntime([EMAIL, MESSAGE], { mag_actions: [BOOK_ACTION] });
+    delete magnet.mag_id;
+    window.MachFiveMagnet.instances[0].id = null;
+    await mount();
+    await call('magnet_start', { email: 'a@b.com' });
+    assert.equal(opened.length, 1, 'should still find the instance and open it');
+  });
+});

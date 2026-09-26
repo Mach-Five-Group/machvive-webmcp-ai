@@ -55,6 +55,26 @@ async function waitForMagnet(timeout = 15000) {
   return null;
 }
 
+/**
+ * How this magnet can schedule, if it can.
+ *
+ * Scheduling is declared in `mag_actions`, not as a macro step — a magnet can
+ * offer a `book` action that hands off to an external calendar (Microsoft
+ * Bookings, say) while its conversational steps collect something else
+ * entirely. Reading only the steps reports "cannot schedule" on a magnet whose
+ * whole purpose is booking.
+ */
+function bookingAction(magnet) {
+  const action = (magnet.mag_actions ?? []).find((a) => a?.type === 'book');
+  if (!action) return null;
+  return {
+    url: action.value ?? null,
+    label: action.label || null,
+    eventName: action.config?.event_name ?? null,
+    source: action.config?.source ?? null
+  };
+}
+
 /** The steps that actually collect something; `message` steps are terminal copy. */
 function collectingSteps(magnet) {
   return (magnet.mag_macro_steps ?? []).filter(
@@ -137,8 +157,11 @@ export class MachviveM5tMagnet extends HTMLElement {
       console.warn(`machvive-m5t-magnet: no magnet "${wanted}" in this app.`);
       return;
     }
+    // A magnet need not declare mag_id; the runtime then stores the instance id
+    // as null. Comparing undefined to null would silently miss, so normalise.
+    const wantId = this.#magnet.mag_id ?? null;
     this.#instance =
-      this.#api.instances.find((i) => i.id === this.#magnet.mag_id) ?? this.#api.instances[0];
+      this.#api.instances.find((i) => (i.id ?? null) === wantId) ?? this.#api.instances[0];
 
     // A capture is the outcome an agent cares about — it tells the agent the
     // visitor actually submitted, rather than that the widget merely opened.
@@ -182,7 +205,11 @@ export class MachviveM5tMagnet extends HTMLElement {
     const steps = collectingSteps(magnet);
     const schema = prefillSchema(magnet);
     const fields = Object.keys(schema.properties);
-    const booking = steps.find((s) => s.step_type === 'booking');
+    // Either shape counts: a booking step in the flow, or a book action offered
+    // alongside it.
+    const bookingStep = steps.find((s) => s.step_type === 'booking');
+    const bookAction = bookingAction(magnet);
+    const canBook = Boolean(bookingStep || bookAction);
 
     this.#register({
       name: 'magnet_describe',
@@ -214,9 +241,16 @@ export class MachviveM5tMagnet extends HTMLElement {
             );
           }
         }
-        lines.push('', booking
-          ? 'It can schedule a meeting. Call magnet_start and the visitor picks a time from the live calendar.'
-          : 'It cannot schedule a meeting; it collects details for a follow-up by email.');
+        if (canBook) {
+          const what = bookAction?.eventName ? `"${bookAction.eventName}"` : 'a meeting';
+          const via = bookAction?.source ? ` via ${bookAction.source}` : '';
+          lines.push('', `It can schedule ${what}${via}. The visitor books it from the widget — ` +
+            'you cannot book on their behalf, and the times come from a live calendar.');
+        } else {
+          lines.push('', 'It cannot schedule a meeting; it collects details for a follow-up by email.');
+        }
+        const otherActions = (magnet.mag_actions ?? []).map((a) => a?.type).filter((t) => t && t !== 'book');
+        if (otherActions.length) lines.push(`Entry points: ${[...new Set(otherActions)].join(', ')}.`);
         lines.push('', 'Use magnet_start to fill in what you know. The visitor reviews and submits — you cannot submit for them.');
         return lines.join('\n');
       }
