@@ -401,6 +401,13 @@ A static top-level `import` will not work in any of these: the module is evaluat
 during the server render, before any browser-only lifecycle hook gets a chance to run.
 Use the dynamic `import()` form shown above.
 
+## The rest of the ecosystem
+
+| | |
+| --- | --- |
+| [webmcp-playground](https://mach-five-group.github.io/webmcp-playground/) · [source](https://github.com/Mach-Five-Group/webmcp-playground) | A live page built with these components, publishing callable tools over HTTPS |
+| [webmcp-browser-use](https://github.com/Mach-Five-Group/webmcp-browser-use) | Drive that page with a real AI agent — discovers the tools and calls them, never touching the DOM |
+
 ## Documentation
 
 Full guide, architecture notes, and adoption constraints live on the
