@@ -21,3 +21,5 @@ export {
   CALL_EVENT
 } from './src/wc/machvive-webmcp-analytics/machvive-webmcp-analytics.js';
 export type { CapturedCall, CallLogOptions } from './src/wc/machvive-webmcp-analytics/machvive-webmcp-analytics.js';
+export { MachviveM5tMagnet } from './src/wc/machvive-m5t-magnet/machvive-m5t-magnet.js';
+export type { MagnetCapture } from './src/wc/machvive-m5t-magnet/machvive-m5t-magnet.js';

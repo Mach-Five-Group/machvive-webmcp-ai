@@ -6,6 +6,7 @@ import {
   TOOLS_CHANGED_EVENT
 } from './src/wc/machvive-webmcp-polyfill/machvive-webmcp-polyfill.js';
 import { MachviveWebmcpInspect } from './src/wc/machvive-webmcp-inspect/machvive-webmcp-inspect.js';
+import { MachviveM5tMagnet } from './src/wc/machvive-m5t-magnet/machvive-m5t-magnet.js';
 import {
   MachviveWebmcpAnalytics,
   CallLog,
@@ -20,6 +21,7 @@ export {
   MachviveWebmcpPolyfill,
   MachviveWebmcpInspect,
   MachviveWebmcpAnalytics,
+  MachviveM5tMagnet,
   CallLog,
   callLog,
   installWebmcpPolyfill,

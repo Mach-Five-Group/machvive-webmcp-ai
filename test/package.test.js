@@ -85,7 +85,9 @@ describe('published tarball', () => {
       'src/wc/machvive-webmcp-inspect/machvive-webmcp-inspect.js',
       'src/wc/machvive-webmcp-inspect/machvive-webmcp-inspect.d.ts',
       'src/wc/machvive-webmcp-analytics/machvive-webmcp-analytics.js',
-      'src/wc/machvive-webmcp-analytics/machvive-webmcp-analytics.d.ts'
+      'src/wc/machvive-webmcp-analytics/machvive-webmcp-analytics.d.ts',
+      'src/wc/machvive-m5t-magnet/machvive-m5t-magnet.js',
+      'src/wc/machvive-m5t-magnet/machvive-m5t-magnet.d.ts'
     ]) {
       assert.ok(files.includes(expected), `${expected} is missing from the tarball`);
     }
@@ -109,7 +111,8 @@ describe('bulk import', () => {
       'machvive-lorum-ipsum',
       'machvive-webmcp-polyfill',
       'machvive-webmcp-inspect',
-      'machvive-webmcp-analytics'
+      'machvive-webmcp-analytics',
+      'machvive-m5t-magnet'
     ]) {
       assert.ok(customElements.get(tag), `${tag} was not registered`);
     }
@@ -121,6 +124,7 @@ describe('bulk import', () => {
       'CALL_EVENT',
       'CallLog',
       'MachviveLorumIpsum',
+      'MachviveM5tMagnet',
       'MachviveWebmcpAnalytics',
       'MachviveWebmcpInspect',
       'MachviveWebmcpPolyfill',

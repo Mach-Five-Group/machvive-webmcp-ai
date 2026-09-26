@@ -29,6 +29,7 @@ elements with Shadow DOM that work anywhere `customElements` does.
 | WebMCP polyfill | `<machvive-webmcp-polyfill>` | Shims `navigator.modelContext` so a page can expose tools to AI agents |
 | WebMCP inspector | `<machvive-webmcp-inspect>` | Lists registered tools, builds a form from each schema, runs them |
 | WebMCP analytics | `<machvive-webmcp-analytics>` | Captures every tool call for listing, editing, export, replay, and dataLayer |
+| M5T Magnet | `<machvive-m5t-magnet>` | Exposes a MachFive Magnet's lead capture to agents |
 | Lorum Ipsum | `<machvive-lorum-ipsum>` | Placeholder copy that projects slotted content |
 
 📖 **[Read the full guide on the Wiki](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/Machvive-WebMCP-Polyfill-Web-Component-Lib)** — what WebMCP is and why it beats
@@ -218,6 +219,66 @@ component never emits tracking traffic on its own:
 Each call then pushes `{ event: 'webmcp_tool_call', webmcp_tool, webmcp_status,
 webmcp_duration_ms, webmcp_params }`. Without the attribute, push individual entries
 on demand with `callLog.pushToDataLayer(id)` or the per-entry button in the UI.
+
+## 🧲 M5T Magnet
+
+`machvive-m5t-magnet` bridges a [MachFive Magnet](https://machfivemagnet.com/) —
+an interactive widget that automates conversational lead generation — to WebMCP,
+so an agent can use it the way a visitor would.
+
+```html
+<machvive-m5t-magnet app-guid="your-app-guid"></machvive-m5t-magnet>
+```
+
+```javascript
+import '@machfivetechchicago/machvive-webmcp-ai/m5t-magnet';
+```
+
+It loads the magnet snippet, waits for the runtime, and registers tools. It
+renders nothing itself — the magnet draws its own launcher.
+
+### The tools come from your magnet, not from this package
+
+A magnet already declares what it collects: each step's field, type, prompt, and
+options. That declaration *is* an agent interface, so the tool surface is derived
+from it. Configure a new step in your magnet admin and it appears to agents with
+no code change here.
+
+Against a magnet asking product interest, name, and email, you get:
+
+| Tool | |
+| --- | --- |
+| `magnet_describe` | what the form asks and whether it can schedule |
+| `magnet_options` | allowed choices for a multiple-choice field |
+| `magnet_start` | open the form with answers filled in |
+| `magnet_status` | has the visitor submitted yet |
+
+`magnet_options` only appears if something has choices. Add a `booking` step and
+`magnet_describe` starts reporting that the magnet can schedule a meeting.
+
+### The agent fills in; the visitor submits
+
+`magnet_start` prefills and opens the widget. It does **not** submit. An agent
+posting someone's email address without them seeing it is a consent problem, and
+lead capture is exactly where that matters.
+
+Some steps can't be pre-answered at all. A `booking` step renders a live calendar
+whose slots change by the minute, so the agent is told it exists and the visitor
+picks a real time. Step types this package doesn't recognise degrade the same
+way — described, not guessed at.
+
+Invalid input comes back as data so the agent can correct itself:
+
+```
+"Nope" is not a choice for product_interest.
+Options: Evaluating MachVive | Building with it and need help | ...
+```
+
+### Events
+
+`magnet-ready` when tools register, `magnet-capture` when a visitor submits, and
+`magnet-error` if the runtime never loads. The element also exposes `.config`
+(the magnet definition it bound to) and `.captures`.
 
 ## 🌓 Theming
 
