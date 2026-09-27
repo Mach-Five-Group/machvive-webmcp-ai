@@ -37,7 +37,14 @@ const SELECT = {
 };
 const EMAIL = { id: 'c2', step_type: 'email', step_columns: ['email'], step_options: [], step_prompts: ['Best email?'] };
 const MESSAGE = { id: 'c3', step_type: 'message', step_columns: [], step_options: [], step_prompts: ['Thanks'] };
-const BOOKING = { id: 'c4', step_type: 'booking', step_columns: ['meeting_time'], step_options: [], step_prompts: ['Pick a time'] };
+const SCHEDULER = {
+  id: 'c4', step_type: 'scheduler', step_columns: ['meeting_time'], step_options: [],
+  step_prompts: ['Pick a time'], step_config: { remote: 'ms_bookings' }
+};
+const LOCAL_SCHEDULER = {
+  id: 'c4', step_type: 'scheduler', step_columns: ['preferred_time'], step_options: [],
+  step_prompts: ['When suits?'], step_config: { start: 9, end: 17, mins: 30 }
+};
 const EXOTIC = { id: 'c5', step_type: 'some_future_type', step_columns: ['mystery'], step_options: [], step_prompts: ['?'] };
 
 const mount = async () => {
@@ -90,19 +97,19 @@ describe('deriving tools from config', () => {
 describe('steps the agent must not pre-answer', () => {
   test('a booking step is excluded from the prefill schema', async () => {
     // A live calendar's slots change; a pre-filled one would be stale or invalid.
-    installRuntime([SELECT, EMAIL, BOOKING, MESSAGE]);
+    installRuntime([SELECT, EMAIL, SCHEDULER, MESSAGE]);
     await mount();
     const start = navigator.modelContext.tools.find((t) => t.name === 'magnet_start');
     assert.equal('meeting_time' in start.inputSchema.properties, false);
   });
 
   test('but the agent is told booking exists and that it can schedule', async () => {
-    installRuntime([SELECT, EMAIL, BOOKING, MESSAGE]);
+    installRuntime([SELECT, EMAIL, SCHEDULER, MESSAGE]);
     await mount();
     const described = text(await call('magnet_describe'));
-    assert.match(described, /meeting_time \(booking\)/);
-    assert.match(described, /live calendar/);
-    assert.match(described, /can schedule a meeting/);
+    assert.match(described, /meeting_time \(scheduler\)/);
+    assert.match(described, /pick the slot themselves/);
+    assert.match(described, /books .* on a real calendar/);
   });
 
   test('an unrecognised step type degrades the same way, not to a string', async () => {
@@ -139,10 +146,13 @@ describe('magnet_start', () => {
     assert.equal(opened.length, 0, 'an invalid call must not open the widget');
   });
 
-  test('rejects unknown fields instead of silently dropping them', async () => {
-    const r = await call('magnet_start', { nope: 'x' });
-    assert.equal(r.isError, true);
-    assert.match(text(r), /Unknown field/);
+  test('passes keys beyond the declared fields through to the lead', async () => {
+    // Deliberate: extra keys ride the capture onto the lead record, which is how
+    // campaign and source identifiers reach the CRM. Stripping them would break it.
+    const r = await call('magnet_start', { email: 'a@b.com', lead_source: 'agent' });
+    assert.notEqual(r.isError, true);
+    assert.equal(opened[0].prefill.lead_source, 'agent');
+    assert.match(text(r), /Passed through with the lead: lead_source/);
   });
 
   test('tells the agent what the visitor still has to supply', async () => {
@@ -159,7 +169,14 @@ describe('magnet_status', () => {
   test('reports not-submitted until a capture arrives', async () => {
     installRuntime([SELECT, EMAIL, MESSAGE]);
     const el = await mount();
-    assert.match(text(await call('magnet_status')), /Not submitted yet/);
+    assert.match(text(await call('magnet_status')), /Not opened yet/);
+
+    window.MachFiveMagnet.emit('open', {});
+    window.MachFiveMagnet.emit('engage', { detail: 'choice' });
+    window.MachFiveMagnet.emit('step', { detail: '2/3' });
+    const mid = text(await call('magnet_status'));
+    assert.match(mid, /Not submitted/);
+    assert.match(mid, /on step 2\/3/);
 
     window.MachFiveMagnet.emit('capture', { email: 'a@b.com' });
     assert.match(text(await call('magnet_status')), /Submitted/);
@@ -180,20 +197,54 @@ describe('scheduling declared as an action, not a step', () => {
     installRuntime([SELECT, EMAIL, MESSAGE], { mag_actions: [BOOK_ACTION, { type: 'chat' }] });
     await mount();
     const d = text(await call('magnet_describe'));
-    assert.match(d, /can schedule "30-min meeting" via ms_bookings/);
+    assert.match(d, /books "30-min meeting" through ms_bookings on a real calendar/);
     assert.doesNotMatch(d, /cannot schedule/);
   });
 
   test('still says the visitor books it, not the agent', async () => {
     installRuntime([SELECT, EMAIL, MESSAGE], { mag_actions: [BOOK_ACTION] });
     await mount();
-    assert.match(text(await call('magnet_describe')), /cannot book on their behalf/);
+    assert.match(text(await call('magnet_describe')), /cannot book for them/);
   });
 
   test('lists other entry points so the agent knows what exists', async () => {
     installRuntime([SELECT, EMAIL, MESSAGE], { mag_actions: [BOOK_ACTION, { type: 'chat' }] });
     await mount();
-    assert.match(text(await call('magnet_describe')), /Entry points: chat/);
+    assert.match(text(await call('magnet_describe')), /Entry points: book, chat/);
+  });
+
+  test('a local scheduler captures a preferred time, and says so rather than claiming a booking', async () => {
+    // Distinguishing these matters: a local scheduler puts a time on the lead but
+    // nothing on anyone's calendar. Calling that "booked" would mislead.
+    installRuntime([SELECT, EMAIL, LOCAL_SCHEDULER, MESSAGE], { mag_actions: [{ type: 'chat' }] });
+    await mount();
+    const d = text(await call('magnet_describe'));
+    assert.match(d, /books nothing on a calendar/);
+    assert.doesNotMatch(d, /real calendar/);
+  });
+
+  test('an external booking URL is a handoff, not an in-widget calendar', async () => {
+    // Shape seen in the wild: a book action pointing at a third-party booking
+    // system with no config.source. It opens in a new tab, so the outcome is
+    // unobservable from this page — claiming a booking would overstate it.
+    installRuntime([SELECT, EMAIL, MESSAGE], {
+      mag_actions: [{ type: 'book', value: 'https://example.janeapp.com' }, { type: 'chat' }]
+    });
+    await mount();
+    const d = text(await call('magnet_describe'));
+    assert.match(d, /sending the visitor to https:\/\/example\.janeapp\.com/);
+    assert.match(d, /whether they went through with it/);
+    assert.doesNotMatch(d, /real calendar/);
+  });
+
+  test('call and email actions surface contact details', async () => {
+    installRuntime([SELECT, EMAIL, MESSAGE], {
+      mag_actions: [{ type: 'call', value: '305-306-2062' }, { type: 'email', value: 'x@y.com' }]
+    });
+    await mount();
+    const d = text(await call('magnet_describe'));
+    assert.match(d, /Phone: 305-306-2062/);
+    assert.match(d, /Email: x@y\.com/);
   });
 
   test('a chat-only magnet still reports it cannot schedule', async () => {

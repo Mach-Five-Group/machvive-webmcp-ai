@@ -24,19 +24,21 @@ import { TOOLS_CHANGED_EVENT } from '../machvive-webmcp-polyfill/machvive-webmcp
  * Step types an agent can meaningfully pre-answer, mapped to JSON Schema.
  *
  * Deliberately an allowlist. A magnet is highly configurable and this runtime
- * already ships step types beyond these — `booking` renders a live calendar
- * whose slots change by the minute, so a pre-filled value would be stale or
- * invalid by the time the visitor saw it. Anything not listed here is described
- * to the agent but left for the visitor to complete, which is the honest
- * default for a type we do not understand.
+ * already ships step types beyond these. `scheduler` is the important exclusion:
+ * with `skip_if_prefilled` set, a prefilled slot would skip the step, so a remote
+ * scheduler would never register the booking — the lead would look booked without
+ * being booked. Anything not listed here is described to the agent but left for
+ * the visitor, which is the honest default for a type we do not understand.
  */
 const PREFILLABLE = {
   text: 'string',
   email: 'string',
   phone: 'string',
-  number: 'number',
   single_select: 'string',
-  multi_select: 'array'
+  // A string, not an array: prefill coerces with String(), so ['a','b'] becomes
+  // "a,b" — which does not match the SDK's ", " join and would not select
+  // anything. Callers pass the labels pre-joined.
+  multi_select: 'string'
 };
 
 /** Steps the visitor must complete in the widget itself. */
@@ -67,15 +69,47 @@ async function waitForMagnet(timeout = 15000) {
  * entirely. Reading only the steps reports "cannot schedule" on a magnet whose
  * whole purpose is booking.
  */
-function bookingAction(magnet) {
+function bookingCapability(magnet) {
+  const schedulers = allSteps(magnet).filter((s) => s?.step_type === 'scheduler');
   const action = (magnet.mag_actions ?? []).find((a) => a?.type === 'book');
-  if (!action) return null;
+  if (!schedulers.length && !action) return null;
+
+  const source = action?.config?.source ?? null;
+  // Only these hosts are embedded in the panel; every other URL opens in a new tab.
+  const embeddable = /^https:\/\/(outlook\.office(365)?\.com|([a-z0-9-]+\.)?cal\.com)\//i;
+  const url = action?.value ?? '';
+
+  // Three outcomes, and conflating them misdescribes what the visitor did:
+  // a real calendar booking inside the widget, a handoff to an external booking
+  // system, or merely recording a preferred time on the lead.
+  let kind = null;
+  if (schedulers.some((x) => x.step_config?.remote === 'ms_bookings') ||
+      source === 'calendly' || source === 'ms_bookings' || embeddable.test(url)) {
+    kind = 'calendar';
+  } else if (action && /^https?:\/\//i.test(url)) {
+    kind = 'external';
+  } else if (schedulers.length || action) {
+    kind = 'preferred_time';
+  }
+
   return {
-    url: action.value ?? null,
-    label: action.label || null,
-    eventName: action.config?.event_name ?? null,
-    source: action.config?.source ?? null
+    kind,
+    url: kind === 'external' ? url : null,
+    source: source ?? (kind === 'calendar' ? 'a calendar' : null),
+    eventName: action?.config?.event_name ?? null
   };
+}
+
+/**
+ * Every step array a magnet can run. A magnet's flow is not only
+ * `mag_macro_steps`: `mag_routes.chat` / `.book` / `.support` hold alternative
+ * flows reached from the hub CTA bar, and a scheduler can live in any of them.
+ */
+function allSteps(magnet) {
+  const routes = magnet.mag_routes ?? {};
+  return [magnet.mag_macro_steps, routes.chat, routes.book, routes.support]
+    .filter(Array.isArray)
+    .flat();
 }
 
 /** The steps that actually collect something; `message` steps are terminal copy. */
@@ -84,6 +118,13 @@ function collectingSteps(magnet) {
     (s) => s.step_type !== 'message' && (s.step_columns ?? []).length
   );
 }
+
+/**
+ * A hub magnet opens on a welcome card and waits for a CTA. Tapping one clears
+ * previously supplied answers, so host prefill does not survive into the route —
+ * the agent should be told rather than left to wonder why its values vanished.
+ */
+const isHub = (magnet) => Boolean(magnet.mag_home) && (magnet.mag_actions ?? []).length > 0;
 
 /** Builds a JSON Schema for the fields this magnet collects. */
 function prefillSchema(magnet) {
@@ -107,6 +148,7 @@ export class MachviveM5tMagnet extends HTMLElement {
   #magnet = null;
   #instance = null;
   #captures = [];
+  #progress = {};
   #registered = [];
 
   static get observedAttributes() {
@@ -145,8 +187,13 @@ export class MachviveM5tMagnet extends HTMLElement {
 
     const found = await waitForMagnet();
     if (!found) {
-      console.warn('machvive-m5t-magnet: the magnet runtime did not load; no tools registered.');
-      this.dispatchEvent(new CustomEvent('magnet-error', { detail: { reason: 'runtime-unavailable' } }));
+      console.warn(
+        'machvive-m5t-magnet: the magnet runtime did not load; no tools registered. ' +
+          'Common causes: the origin is not in the magnet\'s allowed domains, or src/app-guid is wrong.'
+      );
+      this.dispatchEvent(
+        new CustomEvent('magnet-error', { detail: { reason: 'runtime-unavailable' }, bubbles: true, composed: true })
+      );
       return;
     }
 
@@ -166,12 +213,20 @@ export class MachviveM5tMagnet extends HTMLElement {
     this.#instance =
       this.#api.instances.find((i) => (i.id ?? null) === wantId) ?? this.#api.instances[0];
 
-    // A capture is the outcome an agent cares about — it tells the agent the
-    // visitor actually submitted, rather than that the widget merely opened.
-    this.#api.on?.('capture', (detail) => {
-      this.#captures.push({ at: new Date().toISOString(), ...detail });
-      this.dispatchEvent(new CustomEvent('magnet-capture', { detail, bubbles: true, composed: true }));
-    });
+    // Every instance on the page shares one global emitter, so filter by magnet.
+    // Tracking the whole surface lets magnet_status say where the visitor got to,
+    // rather than only whether they finished.
+    const mine = (e) => !e?.magnet || e.magnet === this.#magnet.mag_id || e.magnet === this.#magnet.mag_guid;
+    for (const type of ['open', 'engage', 'route', 'step', 'cta', 'call_tap', 'capture']) {
+      this.#api.on?.(type, (e) => {
+        if (!mine(e)) return;
+        this.#progress = { ...this.#progress, [type]: e?.detail ?? true, last: type };
+        if (type === 'capture') {
+          this.#captures.push({ at: new Date().toISOString(), ...e });
+          this.dispatchEvent(new CustomEvent('magnet-capture', { detail: e, bubbles: true, composed: true }));
+        }
+      });
+    }
 
     this.#registerTools();
     this.dispatchEvent(
@@ -205,6 +260,22 @@ export class MachviveM5tMagnet extends HTMLElement {
     const script = document.createElement('script');
     script.src = `${base}?appguid=${encodeURIComponent(appGuid)}`;
     script.async = true;
+    // A magnet only serves origins on its allow-list, so the usual failure is a
+    // 403 for the current host rather than anything wrong with the page. Without
+    // this the symptom is a silent fifteen-second wait and a generic warning.
+    script.onerror = () => {
+      console.warn(
+        `machvive-m5t-magnet: could not load the magnet from ${base}. ` +
+          `Check that this origin (${globalThis.location?.origin}) is in the magnet's allowed domains.`
+      );
+      this.dispatchEvent(
+        new CustomEvent('magnet-error', {
+          detail: { reason: 'snippet-load-failed', origin: globalThis.location?.origin, src: base },
+          bubbles: true,
+          composed: true
+        })
+      );
+    };
     document.head.append(script);
   }
 
@@ -220,9 +291,8 @@ export class MachviveM5tMagnet extends HTMLElement {
     const fields = Object.keys(schema.properties);
     // Either shape counts: a booking step in the flow, or a book action offered
     // alongside it.
-    const bookingStep = steps.find((s) => s.step_type === 'booking');
-    const bookAction = bookingAction(magnet);
-    const canBook = Boolean(bookingStep || bookAction);
+    const booking = bookingCapability(magnet);
+    const hub = isHub(magnet);
 
     this.#register({
       name: 'magnet_describe',
@@ -250,20 +320,37 @@ export class MachviveM5tMagnet extends HTMLElement {
           for (const s of visitorOnly) {
             lines.push(
               `- ${s.step_columns[0]} (${s.step_type})` +
-                (s.step_type === 'booking' ? ' — a live calendar; they pick a real slot' : '')
+                (s.step_type === 'scheduler' ? ' — a calendar; they pick the slot themselves' : '')
             );
           }
         }
-        if (canBook) {
-          const what = bookAction?.eventName ? `"${bookAction.eventName}"` : 'a meeting';
-          const via = bookAction?.source ? ` via ${bookAction.source}` : '';
-          lines.push('', `It can schedule ${what}${via}. The visitor books it from the widget — ` +
-            'you cannot book on their behalf, and the times come from a live calendar.');
+        const what = booking?.eventName ? `"${booking.eventName}"` : 'a meeting';
+        if (booking?.kind === 'calendar') {
+          lines.push('', `It books ${what}${booking.source ? ` through ${booking.source}` : ''} on a real ` +
+            'calendar, inside the widget. The visitor picks the slot — you cannot book for them.');
+        } else if (booking?.kind === 'external') {
+          lines.push('', `It can book ${what} by sending the visitor to ${booking.url}. That opens ` +
+            'separately, so neither you nor this page can see whether they went through with it.');
+        } else if (booking?.kind === 'preferred_time') {
+          lines.push('', 'It asks for a preferred time but books nothing on a calendar — the time is ' +
+            'captured with the lead for someone to follow up.');
         } else {
           lines.push('', 'It cannot schedule a meeting; it collects details for a follow-up by email.');
         }
-        const otherActions = (magnet.mag_actions ?? []).map((a) => a?.type).filter((t) => t && t !== 'book');
-        if (otherActions.length) lines.push(`Entry points: ${[...new Set(otherActions)].join(', ')}.`);
+
+        // call/email actions publish contact details the visitor can use directly.
+        // An agent asked "how do I reach them" can answer without opening anything.
+        for (const a of magnet.mag_actions ?? []) {
+          if (a?.type === 'call' && a.value) lines.push(`Phone: ${a.value}`);
+          if (a?.type === 'email' && a.value) lines.push(`Email: ${a.value}`);
+        }
+        if (hub) {
+          lines.push('', 'This magnet opens on a welcome card with buttons. Answers are cleared when ' +
+            'the visitor taps one, so anything you prefill will not survive — describe what you know ' +
+            'to the visitor instead of relying on magnet_start to carry it.');
+        }
+        const entry = [...new Set((magnet.mag_actions ?? []).map((a) => a?.type).filter(Boolean))];
+        if (entry.length) lines.push(`Entry points: ${entry.join(', ')}.`);
         lines.push('', 'Use magnet_start to fill in what you know. The visitor reviews and submits — you cannot submit for them.');
         return lines.join('\n');
       }
@@ -298,20 +385,18 @@ export class MachviveM5tMagnet extends HTMLElement {
       description:
         'Open the enquiry form with answers filled in, so the visitor can review and submit. ' +
         `Known fields: ${fields.join(', ')}. ` +
-        'This does NOT submit — the visitor confirms. Use it once you have gathered what you can; ' +
-        'unknown fields can be left out and the visitor will be asked.',
+        'This does NOT submit — the visitor confirms. Fields you leave out are asked of the visitor. ' +
+        'Extra keys beyond the known fields are allowed and travel with the lead, which is how ' +
+        'context like a campaign or source id is passed through.',
       inputSchema: schema,
       execute: (params = {}) => {
         if (!this.#instance) return { content: [{ type: 'text', text: 'The magnet is not loaded.' }], isError: true };
 
-        const unknown = Object.keys(params).filter((k) => !fields.includes(k));
-        if (unknown.length) {
-          // Naming the valid fields lets the agent correct itself in one turn.
-          return {
-            content: [{ type: 'text', text: `Unknown field(s): ${unknown.join(', ')}. Valid: ${fields.join(', ')}.` }],
-            isError: true
-          };
-        }
+        // Keys outside the declared fields are deliberately allowed through: they
+        // ride the capture and land on the lead record, which is how machine
+        // identity (lead_source, campaign ids) reaches the CRM. Stripping them
+        // here would quietly break that.
+        const extra = Object.keys(params).filter((k) => !fields.includes(k));
         for (const s of steps.filter(isPrefillable)) {
           const v = params[s.step_columns[0]];
           const opts = (s.step_options ?? []).map((o) => o.label);
@@ -336,8 +421,10 @@ export class MachviveM5tMagnet extends HTMLElement {
         const visitorOnly = steps.filter((s) => !isPrefillable(s)).map((s) => s.step_columns[0]);
         return (
           `Opened the enquiry form for the visitor${filled.length ? ` with ${filled.join(', ')} filled in` : ''}.` +
+          (extra.length ? ` Passed through with the lead: ${extra.join(', ')}.` : '') +
           (missing.length ? ` They will be asked for: ${missing.join(', ')}.` : '') +
           (visitorOnly.length ? ` They complete in the widget: ${visitorOnly.join(', ')}.` : '') +
+          (isHub(magnet) ? ' Note: this magnet clears answers when the visitor taps a button, so the prefill may not survive.' : '') +
           ' They must review and submit it themselves.'
         );
       }
@@ -345,12 +432,29 @@ export class MachviveM5tMagnet extends HTMLElement {
 
     this.#register({
       name: 'magnet_status',
-      description: 'Check whether the visitor has submitted the enquiry form yet.',
+      description:
+        'Check how far the visitor has got with the enquiry form: whether it has been ' +
+        'opened, engaged with, which step they are on, and whether they submitted.',
       inputSchema: { type: 'object', properties: {} },
-      execute: () =>
-        this.#captures.length
-          ? `Submitted — ${this.#captures.length} capture(s), most recent at ${this.#captures.at(-1).at}.`
-          : 'Not submitted yet. The form may be open and awaiting the visitor.'
+      execute: () => {
+        if (this.#captures.length) {
+          const booked = bookingCapability(magnet)?.kind === 'calendar';
+          return (
+            `Submitted at ${this.#captures.at(-1).at}.` +
+            // The runtime emits nothing after a booking commits, so claiming the
+            // meeting exists would be asserting more than we can observe.
+            (booked ? ' Whether the booking itself completed is not reported by the widget.' : '')
+          );
+        }
+        const p = this.#progress;
+        if (!p.last) return 'Not opened yet.';
+        const parts = [];
+        if (p.step) parts.push(`on step ${p.step}`);
+        if (p.route) parts.push(`took the "${p.route}" route`);
+        if (p.engage) parts.push('has interacted');
+        else if (p.open) parts.push('opened but not yet engaged');
+        return `Not submitted. The visitor ${parts.join(', ') || 'has opened it'}.`;
+      }
     });
 
     globalThis.window?.dispatchEvent?.(new CustomEvent(TOOLS_CHANGED_EVENT, {

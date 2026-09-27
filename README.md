@@ -272,10 +272,16 @@ Against a magnet asking product interest, name, and email, you get:
 posting someone's email address without them seeing it is a consent problem, and
 lead capture is exactly where that matters.
 
-Some steps can't be pre-answered at all. A `booking` step renders a live calendar
-whose slots change by the minute, so the agent is told it exists and the visitor
-picks a real time. Step types this package doesn't recognise degrade the same
-way — described, not guessed at.
+Some steps can't be pre-answered at all. A `scheduler` step is the important one:
+if it were prefilled the step would be skipped, so a remote booking would never
+register and the lead would look booked without being booked. Step types this
+package doesn't recognise degrade the same way — described, not guessed at.
+
+Keys beyond the declared fields are passed through rather than rejected — that's
+how a campaign or source id reaches the lead record.
+
+On a magnet that opens with a welcome card and buttons, the widget clears answers
+when the visitor taps one, so prefill doesn't survive. `magnet_describe` says so.
 
 Invalid input comes back as data so the agent can correct itself:
 
