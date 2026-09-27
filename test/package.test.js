@@ -1,6 +1,6 @@
 import { test, describe, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -146,5 +146,37 @@ describe('bulk import', () => {
     const index = await import('../index.js');
     assert.equal(customElements.get('machvive-lorum-ipsum'), index.MachviveLorumIpsum);
     assert.equal(customElements.get('machvive-webmcp-polyfill'), index.MachviveWebmcpPolyfill);
+  });
+});
+
+describe('network surface', () => {
+  test('only one external URL appears in shipped runtime code', () => {
+    // Automated scanners flag remote URLs in packages, and rightly so. This
+    // pins the surface: the magnet component loads its vendor widget, and
+    // nothing else reaches out. A new URL here should be a deliberate decision
+    // documented in SECURITY.md, not a surprise in someone's audit.
+    const allowed = new Set(['https://machfivemagnet-saas.onrender.com/m5t/v5/coreSnippet']);
+    const found = new Set();
+
+    const walk = (dir) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = `${dir}/${entry.name}`;
+        if (entry.isDirectory()) { walk(full); continue; }
+        if (!entry.name.endsWith('.js')) continue;
+        for (const line of readFileSync(full, 'utf8').split('\n')) {
+          const code = line.trim();
+          // Doc links in comments are not a runtime network surface.
+          if (code.startsWith('*') || code.startsWith('//') || code.startsWith('/*')) continue;
+          for (const m of line.matchAll(/https?:\/\/[^\s'"`)]+/g)) found.add(m[0]);
+        }
+      }
+    };
+    walk(fileURLToPath(new URL('src', root)));
+    for (const m of readFileSync(fileURLToPath(new URL('index.js', root)), 'utf8').matchAll(/https?:\/\/[^\s'"`)]+/g)) {
+      found.add(m[0]);
+    }
+
+    const unexpected = [...found].filter((u) => !allowed.has(u));
+    assert.deepEqual(unexpected, [], `undocumented external URL(s): ${unexpected.join(', ')}`);
   });
 });
