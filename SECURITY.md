@@ -35,33 +35,28 @@ We aim to acknowledge within 3 business days.
 
 ## Network behaviour
 
-Most of this package makes **no network requests of any kind** — the polyfill,
-inspector, analytics, and lorum-ipsum components are entirely local and send no
-telemetry.
+**This package makes no network requests.** Nothing in it contacts a remote host,
+and it contains no external URLs — a test asserts that shipped code has none, so
+one cannot appear unnoticed.
 
-One component is different, by design:
+`machvive-m5t-magnet` bridges a hosted [MachFive Magnet](https://machfivemagnet.com/)
+widget, but it does not decide where that widget comes from. You supply the origin
+at runtime:
 
-**`machvive-m5t-magnet` loads a remote script.** It bridges a hosted
-[MachFive Magnet](https://machfivemagnet.com/) widget, so it injects that
-widget's snippet:
-
+```html
+<machvive-m5t-magnet app-guid="..." src="https://your-magnet-host/m5t/v5/coreSnippet">
+</machvive-m5t-magnet>
 ```
-https://machfivemagnet-saas.onrender.com/m5t/v5/coreSnippet?appguid=<your-guid>
+
+Or load the magnet snippet yourself and the element bridges what is already there,
+injecting nothing:
+
+```html
+<script src="https://your-magnet-host/...?appguid=..." async></script>
+<machvive-m5t-magnet></machvive-m5t-magnet>
 ```
 
-This is the only external URL in the package's runtime code, and automated
-scanners will flag it — correctly. Three things bound it:
-
-- It runs **only if you use that component** and give it an `app-guid`. Importing
-  the package, or any other component, fetches nothing.
-- The origin is overridable with the `src` attribute, so a self-hosted or
-  proxied magnet never contacts the default host.
-- If your page already carries a `coreSnippet` tag, the component uses it rather
-  than loading a second copy.
-
-Once loaded, the magnet snippet is vendor code running under its own origin and
-policy; it communicates with its own backend to capture leads. That traffic is
-the magnet's, not this package's, and is governed by your magnet configuration.
-
-A test asserts that this remains the only external URL in shipped runtime code,
-so a new one cannot appear unnoticed.
+Once the magnet snippet loads, it is vendor code running under its own origin and
+policy, communicating with its own backend to capture leads. That traffic is the
+magnet's, governed by your magnet configuration, and is not something this package
+originates or can see.

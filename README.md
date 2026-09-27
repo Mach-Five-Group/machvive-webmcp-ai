@@ -227,8 +227,18 @@ an interactive widget that automates conversational lead generation — to WebMC
 so an agent can use it the way a visitor would.
 
 ```html
-<machvive-m5t-magnet app-guid="your-app-guid"></machvive-m5t-magnet>
+<!-- the page already carries your magnet snippet: nothing else needed -->
+<script src="https://your-magnet-host/m5t/v5/coreSnippet?appguid=..." async></script>
+<machvive-m5t-magnet></machvive-m5t-magnet>
+
+<!-- or have the element load it, naming the origin your magnet admin gave you -->
+<machvive-m5t-magnet app-guid="your-app-guid" src="https://your-magnet-host/m5t/v5/coreSnippet">
+</machvive-m5t-magnet>
 ```
+
+The package embeds no host. Where your magnet is served from is runtime
+configuration, so this package ships no external URLs and a change of hosting
+costs you no upgrade.
 
 ```javascript
 import '@machfivetechchicago/machvive-webmcp-ai/m5t-magnet';

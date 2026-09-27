@@ -12,10 +12,13 @@
  * email on their behalf, so the default path prefills the widget and opens it for
  * the visitor to review and submit. The magnet's own `open({prefill})` API is
  * built for exactly that.
+ *
+ * This module contains no URLs. Where the magnet runtime is served from is the
+ * integrator's configuration, supplied at runtime via the `src` attribute —
+ * baking in a host would couple every consumer's upgrade cycle to where the
+ * service happens to be hosted today.
  */
 import { TOOLS_CHANGED_EVENT } from '../machvive-webmcp-polyfill/machvive-webmcp-polyfill.js';
-
-const DEFAULT_SRC = 'https://machfivemagnet-saas.onrender.com/m5t/v5/coreSnippet';
 
 /**
  * Step types an agent can meaningfully pre-answer, mapped to JSON Schema.
@@ -180,15 +183,25 @@ export class MachviveM5tMagnet extends HTMLElement {
     );
   }
 
-  /** Adds the vendor script unless the page already carries one. */
+  /**
+   * Adds the vendor script unless the page already carries one.
+   *
+   * Both `src` and `app-guid` are required to inject, and there is no default
+   * origin — your magnet admin gives you the full snippet URL, so naming it here
+   * costs you nothing and keeps this package free of any host it does not own.
+   */
   #injectSnippet() {
-    const appGuid = this.getAttribute('app-guid');
     if (globalThis.window?.machfivemagnet || document.querySelector('script[src*="coreSnippet"]')) return;
-    if (!appGuid) {
-      console.warn('machvive-m5t-magnet: set app-guid, or load the magnet snippet yourself.');
+
+    const appGuid = this.getAttribute('app-guid');
+    const base = this.getAttribute('src');
+    if (!base || !appGuid) {
+      console.warn(
+        'machvive-m5t-magnet: to load the magnet, set both src and app-guid — ' +
+          'or add the magnet snippet to the page yourself and this element will use it.'
+      );
       return;
     }
-    const base = this.getAttribute('src') || DEFAULT_SRC;
     const script = document.createElement('script');
     script.src = `${base}?appguid=${encodeURIComponent(appGuid)}`;
     script.async = true;

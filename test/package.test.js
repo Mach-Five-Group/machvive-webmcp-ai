@@ -150,12 +150,11 @@ describe('bulk import', () => {
 });
 
 describe('network surface', () => {
-  test('only one external URL appears in shipped runtime code', () => {
-    // Automated scanners flag remote URLs in packages, and rightly so. This
-    // pins the surface: the magnet component loads its vendor widget, and
-    // nothing else reaches out. A new URL here should be a deliberate decision
-    // documented in SECURITY.md, not a surprise in someone's audit.
-    const allowed = new Set(['https://machfivemagnet-saas.onrender.com/m5t/v5/coreSnippet']);
+  test('shipped runtime code contains no external URLs', () => {
+    // The package reaches nowhere on its own. Where a hosted magnet is served
+    // from is the integrator's runtime configuration, not something this package
+    // embeds — so shipped code should contain no external URL at all, and an
+    // audit should find nothing to ask about.
     const found = new Set();
 
     const walk = (dir) => {
@@ -176,7 +175,6 @@ describe('network surface', () => {
       found.add(m[0]);
     }
 
-    const unexpected = [...found].filter((u) => !allowed.has(u));
-    assert.deepEqual(unexpected, [], `undocumented external URL(s): ${unexpected.join(', ')}`);
+    assert.deepEqual([...found], [], `shipped code must contain no external URLs: ${[...found].join(', ')}`);
   });
 });
