@@ -159,7 +159,18 @@ enforced before anything runs, and `object`/`array` fields accept JSON.
 
 <!-- floating and expanded on load -->
 <machvive-webmcp-inspect floating open></machvive-webmcp-inspect>
+
+<!-- bottom-right is crowded: chat widgets and support launchers live there too -->
+<machvive-webmcp-inspect floating position="bottom-left"></machvive-webmcp-inspect>
+
+<!-- no launcher drawn; opens on the key combo instead -->
+<machvive-webmcp-inspect floating hidden-fab hotkey="ctrl+shift+k"></machvive-webmcp-inspect>
 ```
+
+`position` takes `bottom-right` (default), `bottom-left`, `top-right` or
+`top-left`, and `--mv-fab-offset-inline` / `--mv-fab-offset-block` nudge it from
+the edge. `hotkey` is opt-in — a component that claimed a key combination on
+every page embedding it would be a poor guest, so no listener binds without it.
 
 `show()` and `hide()` drive the panel from script. The list refreshes automatically
 as tools are registered or removed.
