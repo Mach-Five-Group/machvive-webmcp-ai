@@ -40,11 +40,25 @@ const STYLES = `
           color: var(--mv-fg); background: var(--mv-bg); }
   :host([hidden]) { display: none; }
 
-  /* Floating mode docks the panel without disturbing page layout. */
+  /* Floating mode docks the panel without disturbing page layout.
+     The corner is configurable because bottom-right is crowded — chat widgets,
+     cookie banners and support launchers all live there, and a fixed position
+     means the inspector lands on top of one. */
   /* Floating mode is a detached panel: the .panel and .fab paint themselves, so
      the host must stay transparent or it draws a block over the page. */
-  :host([floating]) { position: fixed; right: 16px; bottom: 16px; z-index: 2147483000;
-                      display: block; width: auto; background: transparent; }
+  :host([floating]) { position: fixed; z-index: 2147483000; display: block; width: auto;
+                      background: transparent;
+                      inset-block-end: var(--mv-fab-offset-block, 16px);
+                      inset-inline-end: var(--mv-fab-offset-inline, 16px); }
+  :host([floating][position="bottom-left"])  { inset-inline-end: auto;
+                      inset-inline-start: var(--mv-fab-offset-inline, 16px); }
+  :host([floating][position="top-right"])    { inset-block-end: auto;
+                      inset-block-start: var(--mv-fab-offset-block, 16px); }
+  :host([floating][position="top-left"])     { inset-block-end: auto; inset-inline-end: auto;
+                      inset-block-start: var(--mv-fab-offset-block, 16px);
+                      inset-inline-start: var(--mv-fab-offset-inline, 16px); }
+  /* hidden-fab keeps the panel reachable by hotkey with no launcher on screen. */
+  :host([floating][hidden-fab]) .fab { display: none; }
   :host([floating]) .panel { display: none; width: min(420px, calc(100vw - 32px));
                              max-height: min(70vh, 560px); overflow: auto;
                              box-shadow: 0 8px 28px var(--mv-shadow); background: var(--mv-bg); }
@@ -112,7 +126,7 @@ export class MachviveWebmcpInspect extends HTMLElement {
   #onToolsChanged = () => this.#render();
 
   static get observedAttributes() {
-    return ['floating', 'open', 'theme'];
+    return ['floating', 'open', 'theme', 'position'];
   }
 
   constructor() {
@@ -123,12 +137,35 @@ export class MachviveWebmcpInspect extends HTMLElement {
   connectedCallback() {
     this.shadowRoot.innerHTML = `<style>${STYLES}</style><div id="root"></div>`;
     globalThis.window.addEventListener(TOOLS_CHANGED_EVENT, this.#onToolsChanged);
+    // Opt-in only: a component that silently claims a key combination on every
+    // page that embeds it would be a poor guest.
+    if (this.getAttribute('hotkey')) globalThis.window.addEventListener('keydown', this.#onHotkey);
     this.#render();
   }
 
   disconnectedCallback() {
     globalThis.window.removeEventListener(TOOLS_CHANGED_EVENT, this.#onToolsChanged);
+    globalThis.window.removeEventListener('keydown', this.#onHotkey);
   }
+
+  /** Matches a combo like "ctrl+shift+k" or "alt+i" against a keydown. */
+  #onHotkey = (event) => {
+    const combo = (this.getAttribute('hotkey') || '').toLowerCase().split('+').map((p) => p.trim());
+    const key = combo.at(-1);
+    if (!key) return;
+    const needs = (name) => combo.includes(name);
+    if (
+      event.key.toLowerCase() !== key ||
+      event.ctrlKey !== needs('ctrl') ||
+      event.shiftKey !== needs('shift') ||
+      event.altKey !== needs('alt') ||
+      event.metaKey !== (needs('meta') || needs('cmd'))
+    ) {
+      return;
+    }
+    event.preventDefault();
+    this.hasAttribute('open') ? this.hide() : this.show();
+  };
 
   attributeChangedCallback() {
     if (this.shadowRoot?.getElementById('root')) this.#render();

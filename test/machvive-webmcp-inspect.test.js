@@ -259,3 +259,54 @@ describe('degraded environments', () => {
     Object.defineProperty(navigator, 'modelContext', { value: real, configurable: true });
   });
 });
+
+describe('floating placement and hotkey', () => {
+  const css = (el) => el.shadowRoot.querySelector('style').textContent;
+
+  test('offers all four corners, since bottom-right is usually taken', () => {
+    // Chat widgets, cookie banners and support launchers all live bottom-right;
+    // a fixed corner means landing on top of one.
+    const el = mount();
+    for (const corner of ['bottom-left', 'top-right', 'top-left']) {
+      assert.ok(css(el).includes(`[position="${corner}"]`), `${corner} missing`);
+    }
+  });
+
+  test('offsets are custom properties, so a page can nudge it', () => {
+    assert.match(css(mount()), /--mv-fab-offset-block/);
+    assert.match(css(mount()), /--mv-fab-offset-inline/);
+  });
+
+  test('hidden-fab keeps the panel reachable with no launcher drawn', () => {
+    assert.match(css(mount()), /\[hidden-fab\]\) \.fab \{ display: none/);
+  });
+
+  test('a hotkey toggles the panel', async () => {
+    const el = mount();
+    el.setAttribute('floating', '');
+    el.setAttribute('hotkey', 'ctrl+shift+k');
+    el.remove();
+    document.body.append(el); // re-connect so the listener binds
+    await tick();
+
+    const press = (init) => window.dispatchEvent(new window.KeyboardEvent('keydown', init));
+    press({ key: 'k', ctrlKey: true, shiftKey: true });
+    assert.equal(el.hasAttribute('open'), true, 'combo should open it');
+    press({ key: 'k', ctrlKey: true, shiftKey: true });
+    assert.equal(el.hasAttribute('open'), false, 'same combo should close it');
+  });
+
+  test('ignores the key without its modifiers, and binds nothing without the attribute', async () => {
+    const el = mount();
+    el.setAttribute('floating', '');
+    el.setAttribute('hotkey', 'ctrl+shift+k');
+    el.remove(); document.body.append(el); await tick();
+    window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'k' }));
+    assert.equal(el.hasAttribute('open'), false, 'bare key must not fire');
+
+    const plain = mount();
+    plain.setAttribute('floating', '');
+    window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'k', ctrlKey: true, shiftKey: true }));
+    assert.equal(plain.hasAttribute('open'), false, 'no hotkey attribute means no listener');
+  });
+});
