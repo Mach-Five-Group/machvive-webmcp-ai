@@ -44,11 +44,21 @@ export interface ModelContext {
 /** Event name dispatched on `window` whenever the registry changes. */
 export const TOOLS_CHANGED_EVENT: 'machvive-webmcp-change';
 
+export interface InstallOptions {
+  /**
+   * Install even off a secure context. The default refusal mirrors the native
+   * `[SecureContext]` API; opt in for an offline bundle or an intranet address,
+   * where no native implementation is coming and the check only blocks.
+   */
+  allowInsecureContext?: boolean;
+}
+
 /**
- * Installs the polyfill. No-op when WebMCP is native or the page is not a
- * secure context. Returns true only if this call installed it.
+ * Installs the polyfill. No-op when WebMCP is native, or when the page is not a
+ * secure context and `allowInsecureContext` is not set. Returns true only if
+ * this call installed it.
  */
-export function installWebmcpPolyfill(): boolean;
+export function installWebmcpPolyfill(options?: InstallOptions): boolean;
 
 export class MachviveWebmcpPolyfill extends HTMLElement {
   registerTool(tool: WebmcpToolDescriptor): void;

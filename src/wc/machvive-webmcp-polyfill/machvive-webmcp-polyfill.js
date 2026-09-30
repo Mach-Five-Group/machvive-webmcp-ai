@@ -95,15 +95,27 @@ class ModelContextPolyfill {
  * Installs the polyfill. No-op when the browser ships WebMCP natively, so a page
  * always talks to the real implementation where one exists.
  *
+ * @param {{allowInsecureContext?: boolean}} [options] Set `allowInsecureContext`
+ *   to install off a secure context — for an offline bundle or an intranet
+ *   address, where no native implementation is coming.
  * @returns {boolean} true if this call installed the polyfill.
  */
-export function installWebmcpPolyfill() {
+export function installWebmcpPolyfill({ allowInsecureContext = false } = {}) {
   if ('modelContext' in navigator) return false;
 
-  // The native API is [SecureContext]; matching that keeps http:// pages from
-  // developing against a surface the browser will never give them.
-  if (!window.isSecureContext) {
-    console.warn('WebMCP: navigator.modelContext is a secure-context API; polyfill not installed.');
+  // The native API is [SecureContext], and matching it stops a page being built
+  // against a surface the browser will never provide. That reasoning does not
+  // hold everywhere: an offline bundle, or a page served to a LAN address, has
+  // no native implementation coming and the check only blocks. Hence the opt-in.
+  if (!window.isSecureContext && !allowInsecureContext) {
+    console.warn(
+      `WebMCP: ${globalThis.location?.origin ?? 'this page'} is not a secure context, so ` +
+        'navigator.modelContext was not installed. A secure origin, localhost or 127.0.0.1 ' +
+        'qualifies; ' +
+        'a LAN address or custom hostname does not. For an offline or intranet bundle, opt in ' +
+        'with <machvive-webmcp-polyfill allow-insecure> or ' +
+        'installWebmcpPolyfill({ allowInsecureContext: true }).'
+    );
     return false;
   }
 
@@ -123,7 +135,10 @@ export class MachviveWebmcpPolyfill extends HTMLElement {
   }
 
   connectedCallback() {
-    installWebmcpPolyfill();
+    // Import-time install already ran and may have declined on a non-secure
+    // context. Retry honouring the attribute, since the element is the first
+    // point at which the page can say it means it.
+    installWebmcpPolyfill({ allowInsecureContext: this.hasAttribute('allow-insecure') });
     this.shadowRoot.innerHTML = `<style>:host { display: none; }</style>`;
   }
 

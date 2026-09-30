@@ -20,7 +20,43 @@ describe('installWebmcpPolyfill', () => {
   test('refuses to install off a secure context and warns', async () => {
     const { warnings } = await loadPolyfill({ secureContext: false });
     assert.equal('modelContext' in navigator, false);
-    assert.match(warnings.join(' '), /secure-context/);
+    assert.match(warnings.join(' '), /not a secure context/);
+  });
+
+  test('installs off a secure context when explicitly allowed', async () => {
+    // An offline bundle or an intranet address has no native implementation
+    // coming, so the secure-context check only blocks there.
+    const { module } = await loadPolyfill({ secureContext: false });
+    assert.equal('modelContext' in navigator, false, 'default still refuses');
+    assert.equal(module.installWebmcpPolyfill({ allowInsecureContext: true }), true);
+    assert.equal(typeof navigator.modelContext.registerTool, 'function');
+  });
+
+  test('the element can opt in on behalf of the page', async () => {
+    const { module } = await loadPolyfill({ secureContext: false });
+    assert.equal('modelContext' in navigator, false);
+
+    const el = document.createElement('machvive-webmcp-polyfill');
+    el.setAttribute('allow-insecure', '');
+    document.body.append(el);
+    assert.ok(navigator.modelContext, 'allow-insecure should install it');
+    el.remove();
+    void module;
+  });
+
+  test('without the attribute the element leaves it uninstalled', async () => {
+    await loadPolyfill({ secureContext: false });
+    const el = document.createElement('machvive-webmcp-polyfill');
+    document.body.append(el);
+    assert.equal('modelContext' in navigator, false);
+    el.remove();
+  });
+
+  test('the refusal names the origin and the way out', async () => {
+    const { warnings } = await loadPolyfill({ secureContext: false });
+    const text = warnings.join(' ');
+    assert.match(text, /not a secure context/);
+    assert.match(text, /allow-insecure/, 'a warning that does not say how to proceed wastes the reader');
   });
 
   test('installs at import time, before the element upgrades', async () => {

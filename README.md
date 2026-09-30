@@ -96,7 +96,28 @@ so a page can declare agent-callable tools before browsers ship the API natively
 
 It is a no-op when the browser already implements WebMCP, so your page always talks
 to the real implementation where one exists. Because the native API is
-`[SecureContext]`, the polyfill installs only on HTTPS (and `localhost`).
+`[SecureContext]`, the polyfill installs only on a secure origin — which includes
+`localhost`, `127.0.0.1`, and `file://` URLs in most browsers.
+
+### Offline and intranet bundles
+
+That default mirrors the native API so you cannot build against a surface the
+browser will never provide. It does not fit every case: an offline bundle, or a
+page served to a LAN address like `192.168.1.20`, has no native implementation
+coming, and the check only blocks. Opt in there:
+
+```html
+<machvive-webmcp-polyfill allow-insecure></machvive-webmcp-polyfill>
+```
+
+```javascript
+import { installWebmcpPolyfill } from '@machfivetechchicago/machvive-webmcp-ai/webmcp-polyfill';
+installWebmcpPolyfill({ allowInsecureContext: true });
+```
+
+The element retries the install, so the attribute works even though the module
+installs on import. The refusal warning names the current origin and both escape
+hatches, so the cause is visible from the console.
 
 ```html
 <machvive-webmcp-polyfill></machvive-webmcp-polyfill>
