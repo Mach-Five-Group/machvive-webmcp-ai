@@ -1,7 +1,7 @@
 {
   "name": "machvive-webmcp",
-  "description": "Build agent-callable web pages with the machvive WebMCP components \u2014 tool registration via navigator.modelContext, plus the inspector and analytics components.",
-  "version": "1.0.0",
+  "description": "Build agent-callable web pages with the machvive WebMCP components — tool registration via navigator.modelContext, plus the inspector and analytics components.",
+  "version": "1.1.0",
   "author": {
     "name": "MachFiveTech Chicago",
     "url": "https://github.com/Mach-Five-Group"

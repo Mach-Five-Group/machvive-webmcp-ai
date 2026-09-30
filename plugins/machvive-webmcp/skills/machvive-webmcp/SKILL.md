@@ -1,6 +1,6 @@
 ---
 name: machvive-webmcp
-description: Build agent-callable web pages with the machvive WebMCP components (@machfivetechchicago/machvive-webmcp-ai) — registering tools an AI agent can invoke through navigator.modelContext, plus the inspector and analytics components. Use this whenever the user mentions WebMCP, navigator.modelContext, modelContext, machvive, agent-readable or agent-callable pages, exposing site functionality to AI agents, registering tools a browser agent can call, or capturing and replaying agent tool calls — even when they don't name the package. Also use when someone asks how an AI agent could use their site's functionality instead of scraping the DOM, or is debugging why their registered tools aren't being captured or discovered.
+description: Build agent-callable web pages with the machvive WebMCP components (@machfivetechchicago/machvive-webmcp-ai) — registering tools an AI agent can invoke through navigator.modelContext, plus the inspector and analytics components. Use this whenever the user mentions WebMCP, navigator.modelContext, modelContext, machvive, agent-readable or agent-callable pages, exposing site functionality to AI agents, registering tools a browser agent can call, capturing and replaying agent tool calls, or exposing a MachFive Magnet's lead capture to agents — even when they don't name the package. Also use when someone asks how an AI agent could use their site's functionality instead of scraping the DOM, or is debugging why their registered tools aren't being captured or discovered.
 ---
 
 # machvive WebMCP components
@@ -17,6 +17,7 @@ It implements the [W3C WebMCP proposal](https://webmachinelearning.github.io/web
 | `<machvive-webmcp-polyfill>` | Provides `navigator.modelContext` |
 | `<machvive-webmcp-inspect>` | Lists tools, builds a form per schema, runs them |
 | `<machvive-webmcp-analytics>` | Captures every call for replay, export, dataLayer |
+| `<machvive-m5t-magnet>` | Bridges a MachFive Magnet's lead capture to WebMCP |
 | `<machvive-lorum-ipsum>` | Placeholder copy (unrelated to WebMCP) |
 
 ## Install and import
@@ -34,7 +35,27 @@ import '@machfivetechchicago/machvive-webmcp-ai/webmcp-inspect';
 
 Importing a module registers its custom element and installs the polyfill. There
 is no init function to call. Subpaths: `/webmcp-polyfill`, `/webmcp-inspect`,
-`/webmcp-analytics`, `/lorum-ipsum`. TypeScript declarations ship with the package.
+`/webmcp-analytics`, `/m5t-magnet`, `/lorum-ipsum`. TypeScript declarations ship
+with the package.
+
+### Bundling the files directly
+
+For an offline or portable build that copies the sources rather than installing
+them, the components import each other and a shared module, so picking files by
+name leaves a broken graph. `src/wc/shared/theme.js` is the one that gets missed —
+it is not a component, but both the inspector and analytics import it, and its
+absence surfaces as a module-resolution error rather than anything that names the
+missing file.
+
+| Copying | Also copy |
+| --- | --- |
+| polyfill | nothing; it stands alone |
+| inspect | polyfill, `shared/theme.js` |
+| analytics | `shared/theme.js` |
+| m5t-magnet | polyfill |
+
+Relative imports resolve from disk, so keep the directory layout. `npm pack` then
+copying `package/src/` wholesale is the reliable way to get a correct set.
 
 ## Registering a tool
 
@@ -80,10 +101,24 @@ is that tools registered earlier cannot be wrapped, because the polyfill
 deliberately hides handlers from `tools`. Symptom: an empty log and a console
 warning, with everything else apparently working.
 
-**2. A secure context is required.** The native API is `[SecureContext]`, so the
-polyfill matches it: HTTPS and `localhost` only. On plain HTTP it declines with a
-console warning and `navigator.modelContext` stays undefined. A staging box served
-over HTTP will look broken for no visible reason.
+**2. A secure context is required, unless you opt out.** The native API is
+`[SecureContext]`, so the polyfill matches it. `https://`, `localhost`, `127.0.0.1`
+and `file://` URLs all qualify; a LAN address like `192.168.1.20` or a custom
+hostname does not, and there the polyfill declines and `navigator.modelContext`
+stays undefined.
+
+The refusal warning names the current origin, which is the fastest way to tell a
+genuine non-secure origin from some other failure.
+
+An offline bundle or an intranet page has no native implementation coming, so the
+check only blocks. Opt in explicitly there:
+
+```html
+<machvive-webmcp-polyfill allow-insecure></machvive-webmcp-polyfill>
+```
+```javascript
+installWebmcpPolyfill({ allowInsecureContext: true });
+```
 
 **3. These modules are browser-only and throw under SSR.** Every component
 evaluates `class X extends HTMLElement` at module load, so importing any entry
@@ -129,6 +164,12 @@ sends `3`, not `"3"` — so what you test matches what an agent sends.
 `floating` docks it as a corner panel with no layout impact; add `open` to start
 expanded, or call `show()` / `hide()`. The list refreshes as tools come and go.
 
+Bottom-right is usually taken — chat widgets and support launchers live there — so
+`position` accepts `bottom-right` (default), `bottom-left`, `top-right` or
+`top-left`, with `--mv-fab-offset-inline` / `--mv-fab-offset-block` to nudge it.
+`hidden-fab` draws no launcher at all, and `hotkey="ctrl+shift+k"` toggles the
+panel. The hotkey is opt-in; no listener binds without the attribute.
+
 ## Analytics
 
 ```html
@@ -156,6 +197,38 @@ Two behaviors to rely on. Recording is best-effort — a failure inside the log 
 never change a tool's result or make a successful call look like an error. And
 `dataLayer` push is **opt-in** via the `datalayer` attribute, so importing the
 component never emits tracking traffic on its own.
+
+## Magnet bridge
+
+`machvive-m5t-magnet` exposes a [MachFive Magnet](https://machfivemagnet.com/) —
+an interactive lead-capture widget — to agents. Its tools are derived from that
+magnet's own configuration, so they differ per magnet.
+
+```html
+<!-- the page already carries the magnet snippet: nothing else needed -->
+<machvive-m5t-magnet></machvive-m5t-magnet>
+
+<!-- or have the element load it; there is no default host -->
+<machvive-m5t-magnet app-guid="..." src="https://your-magnet-host/m5t/v5/coreSnippet">
+</machvive-m5t-magnet>
+```
+
+Typical surface: `magnet_describe` (call this first), `magnet_options`,
+`magnet_start`, `magnet_status`. Four things govern how to use it:
+
+- **`magnet_start` prefills and opens; it never submits.** The visitor reviews and
+  confirms. There is no agent-side submit and adding one would bypass consent the
+  lead record depends on.
+- **Some steps cannot be pre-answered.** A `scheduler` step is a live calendar;
+  prefilling it would skip the step and register no booking, so the lead would look
+  booked without being booked. Unrecognised step types are described, not guessed.
+- **`multi_select` takes labels joined with `", "`,** not an array.
+- **Keys beyond the declared fields are passed through,** not rejected — that is how
+  a campaign or source id reaches the lead record.
+
+Call `magnet_describe` before planning: it reports whether the magnet books on a
+real calendar, hands off to an external booking system, or merely records a
+preferred time — and whether prefill will survive on that magnet.
 
 ## Theming
 
