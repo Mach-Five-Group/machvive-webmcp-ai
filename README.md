@@ -34,7 +34,8 @@ elements with Shadow DOM that work anywhere `customElements` does.
 
 📖 **[Read the full guide on the Wiki](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/Machvive-WebMCP-Polyfill-Web-Component-Lib)** — what WebMCP is and why it beats
 scripted clicking, how the components compose, and the constraints worth knowing
-before you adopt.
+before you adopt. For the commercial case rather than the technical one, start with
+**[WebMCP as a Business Accelerator](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/WebMCP-as-a-Business-Accelerator)**.
 
 🎮 **[Try the live playground](https://mach-five-group.github.io/webmcp-playground/)** — a running WebMCP endpoint. Point
 [Browser Use](https://github.com/browser-use/browser-use) or your own agent at it
@@ -458,8 +459,15 @@ Use the dynamic `import()` form shown above.
 
 ## Documentation
 
-Full guide, architecture notes, and adoption constraints live on the
-**[project Wiki](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki)**.
+The **[project Wiki](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki)** carries the long-form material:
+
+| | |
+| --- | --- |
+| [WebMCP as a Business Accelerator](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/WebMCP-as-a-Business-Accelerator) | Why an agent is not just another visitor, and what that changes for a business |
+| [Agent Topologies](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/Agent-Topologies) | The two ways an agent reaches your page, and why the examples only show one |
+| [Machvive WebMCP Polyfill Web Component Lib](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/Machvive-WebMCP-Polyfill-Web-Component-Lib) | Full guide: the components, how they compose, adoption constraints |
+| [Magnet Integration](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/Magnet-Integration) | Exposing a MachFive Magnet's lead capture to agents |
+| [WebMCP Chat Bridge](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/WebMCP-Chat-Bridge) | Wiring an in-page chat component to the page's own tools |
 
 ## License
 
