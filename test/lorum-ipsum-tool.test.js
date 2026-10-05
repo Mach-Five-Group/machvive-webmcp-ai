@@ -142,6 +142,69 @@ describe('<machvive-lorum-ipsum> as a WebMCP tool', () => {
     assert.equal(named(), undefined, 'a tool that cannot run must not stay advertised');
   });
 
+  test('provideContext wipes the tool, and publishTool brings it back', async () => {
+    const el = mount();
+    assert.ok(named(), 'published on connect');
+
+    // provideContext replaces the whole toolset by design — a page calling it is
+    // asserting total ownership, so the element must not fight that silently.
+    navigator.modelContext.provideContext({
+      tools: [{
+        name: 'something_else',
+        description: 'a page-curated tool',
+        inputSchema: { type: 'object', properties: {} },
+        execute: async () => ({ content: [{ type: 'text', text: 'ok' }] })
+      }]
+    });
+    assert.equal(named(), undefined, 'the element tool is gone, as provideContext promises');
+
+    el.publishTool();
+    assert.ok(named(), 'publishTool restores it');
+    assert.ok(tools().some((t) => t.name === 'something_else'), 'without displacing the page tools');
+
+    const result = await navigator.modelContext.callTool(PLACEHOLDER_TOOL, { sentences: 1 });
+    assert.equal(el.text, result.content[0].text, 'and it still drives this element');
+    el.remove();
+  });
+
+  test('a block connecting after provideContext publishes the tool again', async () => {
+    const first = mount();
+    assert.ok(named());
+
+    navigator.modelContext.provideContext({ tools: [] });
+    assert.equal(named(), undefined, 'wiped, as provideContext promises');
+
+    // Ownership is now stale: it still points at `first`, while the registry
+    // holds nothing. A guard that only checked ownership would leave the page
+    // with no tool for the rest of its life.
+    const second = mount();
+    assert.ok(named(), 'a newly connected block should republish');
+
+    const result = await navigator.modelContext.callTool(PLACEHOLDER_TOOL, { sentences: 1, seed: 9 });
+    assert.equal(second.text, result.content[0].text);
+    first.remove(); second.remove();
+  });
+
+  test('publishTool transfers ownership between blocks', async () => {
+    const first = mount();
+    const second = mount();
+    second.publishTool();
+
+    const result = await navigator.modelContext.callTool(PLACEHOLDER_TOOL, { sentences: 1, seed: 3 });
+    assert.equal(second.text, result.content[0].text, 'the asking block now owns it');
+    assert.notEqual(first.text, result.content[0].text);
+    first.remove(); second.remove();
+  });
+
+  test('withdrawTool removes it without touching the attribute', () => {
+    const el = mount();
+    assert.ok(named());
+    el.withdrawTool();
+    assert.equal(named(), undefined);
+    assert.equal(el.hasAttribute('no-tool'), false, 'it is an action, not a state change');
+    el.remove();
+  });
+
   test('no-tool opts out, and toggling it is reversible', () => {
     const quiet = mount({ 'no-tool': '' });
     assert.equal(named(), undefined, 'no-tool must not publish');

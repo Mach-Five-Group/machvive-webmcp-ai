@@ -21,6 +21,10 @@ export declare class MachviveLorumIpsum extends HTMLElement {
   readonly text: string;
   /** Produces fresh copy and returns it. A seeded element rerolls identically. */
   regenerate(): string;
+  /** (Re)publishes the WebMCP tool. Call after provideContext, which replaces it. */
+  publishTool(): this;
+  /** Withdraws the tool without setting the `no-tool` attribute. */
+  withdrawTool(): this;
 }
 
 declare global {

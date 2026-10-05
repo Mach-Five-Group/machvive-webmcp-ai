@@ -459,6 +459,19 @@ Add `no-tool` to opt a block out, or to every block to publish nothing.
 <machvive-lorum-ipsum no-tool></machvive-lorum-ipsum>
 ```
 
+**If your page calls `provideContext`, publish it again afterwards.** That API
+replaces the *entire* toolset by design, so it drops anything an element registered
+when it connected. The component does not fight that — a page calling
+`provideContext` is asserting ownership of the toolset — so ask for it back:
+
+```js
+navigator.modelContext.provideContext({ tools: myTools });
+document.querySelector('machvive-lorum-ipsum')?.publishTool();
+```
+
+`publishTool()` also transfers ownership to the block you call it on, and
+`withdrawTool()` removes the tool without setting the attribute.
+
 Because of this, importing `@machfivetechchicago/machvive-webmcp-ai/lorum-ipsum`
 installs the polyfill too. That is deliberate — a component that registers tools
 against a registry that may not exist yet is how the analytics component once shipped

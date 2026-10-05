@@ -83,7 +83,12 @@ loop end to end with nothing to set up, and the tool is safe to expose (pure tex
 network, no storage).
 
 One tool per page regardless of how many blocks are placed; the first connected
-element owns it. `no-tool` opts a block out. Importing the `/lorum-ipsum` subpath
+element owns it. `no-tool` opts a block out.
+
+**Watch for `provideContext`.** It replaces the whole toolset, so it drops the
+element's tool along with everything else — call `el.publishTool()` after it to get
+the tool back. This is the most likely reason someone reports the tool "disappearing".
+`withdrawTool()` is the inverse. Importing the `/lorum-ipsum` subpath
 installs the polyfill as a side effect, for the same reason analytics does.
 
 Two things worth knowing. **Reach for `lang="english"` when testing layout** — Latin's

@@ -177,10 +177,37 @@ ${THEME_CSS}
    * writing a tool of their own. It is a deliberately safe one to hand out:
    * pure text generation, no network, no storage, no state beyond this element.
    */
+  /**
+   * Publishes the tool, taking ownership from another block if it has it.
+   *
+   * Needed because `provideContext` *replaces* the whole toolset by design, so
+   * any page that calls it silently drops tools published by elements. There is
+   * no listening for that: re-registering automatically would fight a page that
+   * curated its toolset on purpose, and could ping-pong against the change event
+   * it would itself cause. So the page asks, explicitly.
+   */
+  publishTool() {
+    owner = null;
+    this.#claimTool();
+    return this;
+  }
+
+  /** Withdraws it. Equivalent to setting `no-tool`, without the attribute. */
+  withdrawTool() {
+    this.#releaseTool();
+    return this;
+  }
+
   #claimTool() {
-    if (owner || this.hasAttribute('no-tool')) return;
+    if (this.hasAttribute('no-tool')) return;
     const context = globalThis.navigator?.modelContext;
     if (!context) return;
+
+    // Ownership alone is not enough to skip: after provideContext the owner
+    // still points here while the registry no longer holds the tool, and a
+    // bare `if (owner) return` would leave the page advertising nothing.
+    const live = context.tools?.some((tool) => tool.name === PLACEHOLDER_TOOL);
+    if (owner && live) return;
 
     owner = this;
     context.registerTool({
