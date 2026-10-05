@@ -123,15 +123,19 @@ describe('bulk import', () => {
     assert.deepEqual(Object.keys(index).sort(), [
       'CALL_EVENT',
       'CallLog',
+      'LANGUAGES',
       'MachviveLorumIpsum',
       'MachviveM5tMagnet',
       'MachviveWebmcpAnalytics',
       'MachviveWebmcpInspect',
       'MachviveWebmcpPolyfill',
       'TOOLS_CHANGED_EVENT',
+      'WORD_BANKS',
       'callLog',
       'installAnalytics',
-      'installWebmcpPolyfill'
+      'installWebmcpPolyfill',
+      'loremIpsum',
+      'loremSentence'
     ]);
 
     const declared = readFileSync(

@@ -1,5 +1,11 @@
 // Import all components to trigger their customElements.define() registration
-import { MachviveLorumIpsum } from './src/wc/machvive-lorum-ipsum/machvive-lorum-ipsum.js';
+import {
+  MachviveLorumIpsum,
+  loremIpsum,
+  loremSentence,
+  LANGUAGES,
+  WORD_BANKS
+} from './src/wc/machvive-lorum-ipsum/machvive-lorum-ipsum.js';
 import {
   MachviveWebmcpPolyfill,
   installWebmcpPolyfill,
@@ -18,6 +24,10 @@ import {
 // Export them all from a single entry point
 export {
   MachviveLorumIpsum,
+  loremIpsum,
+  loremSentence,
+  LANGUAGES,
+  WORD_BANKS,
   MachviveWebmcpPolyfill,
   MachviveWebmcpInspect,
   MachviveWebmcpAnalytics,

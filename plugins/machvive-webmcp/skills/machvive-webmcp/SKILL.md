@@ -18,7 +18,7 @@ It implements the [W3C WebMCP proposal](https://webmachinelearning.github.io/web
 | `<machvive-webmcp-inspect>` | Lists tools, builds a form per schema, runs them |
 | `<machvive-webmcp-analytics>` | Captures every call for replay, export, dataLayer |
 | `<machvive-m5t-magnet>` | Bridges a MachFive Magnet's lead capture to WebMCP |
-| `<machvive-lorum-ipsum>` | Placeholder copy (unrelated to WebMCP) |
+| `<machvive-lorum-ipsum>` | Generates placeholder copy, Latin or business-speak (unrelated to WebMCP) |
 
 ## Install and import
 
@@ -57,6 +57,29 @@ missing file.
 Relative imports resolve from disk, so keep the directory layout. `npm pack` then
 copying `package/src/` wholesale is the reliable way to get a correct set.
 
+
+## Placeholder copy
+
+`<machvive-lorum-ipsum>` generates its own text; slotted light DOM still wins and is
+projected as the element has always done. Attributes: `lang` (`latin` | `english`),
+`sentences` (`-1` randomises 1–5), `paragraphs`, `seed`, `theme`. Properties mirror
+them, plus `text` and `regenerate()`.
+
+The generator is also exported as a pure function, which is usually what you want when
+the task is fixtures or a mock conversation rather than a placeholder block:
+
+```javascript
+import { loremIpsum, loremSentence } from '@machfivetechchicago/machvive-webmcp-ai';
+
+loremIpsum({ sentences: 2, lang: 'english' });
+loremIpsum({ paragraphs: 3, seed: 42 });   // same string every call
+```
+
+Two things worth knowing. **Reach for `lang="english"` when testing layout** — Latin's
+word lengths and letter frequencies are not English's, so a column that survives Cicero
+can still break on the business-speak real copy is written in. And **pass a `seed`
+whenever output is compared** — unseeded copy changes every render, which makes a
+screenshot or visual diff worthless.
 ## Registering a tool
 
 A tool is a name, a description, a JSON Schema for its inputs, and a handler.

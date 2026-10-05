@@ -30,7 +30,7 @@ elements with Shadow DOM that work anywhere `customElements` does.
 | WebMCP inspector | `<machvive-webmcp-inspect>` | Lists registered tools, builds a form from each schema, runs them |
 | WebMCP analytics | `<machvive-webmcp-analytics>` | Captures every tool call for listing, editing, export, replay, and dataLayer |
 | M5T Magnet | `<machvive-m5t-magnet>` | Exposes a MachFive Magnet's lead capture to agents |
-| Lorum Ipsum | `<machvive-lorum-ipsum>` | Placeholder copy that projects slotted content |
+| Lorum Ipsum | `<machvive-lorum-ipsum>` | Generates placeholder copy — Latin, or English business-speak |
 
 📖 **[Read the full guide on the Wiki](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/Machvive-WebMCP-Polyfill-Web-Component-Lib)** — what WebMCP is and why it beats
 scripted clicking, how the components compose, and the constraints worth knowing
@@ -390,6 +390,50 @@ Claude then knows to import analytics before registering tools, that the polyfil
 needs a secure context, that a top-level import breaks under SSR, and that
 `sideEffects: false` silently drops the component registrations — the four things
 that fail in ways that look like something else.
+
+
+## Placeholder copy
+
+`<machvive-lorum-ipsum>` generates its own text. Slotted content still wins, so
+anything you put inside it is projected as before — the generated copy is the
+fallback.
+
+```html
+<machvive-lorum-ipsum sentences="3"></machvive-lorum-ipsum>
+<machvive-lorum-ipsum lang="english" paragraphs="2" seed="7"></machvive-lorum-ipsum>
+```
+
+| Attribute | Default | Meaning |
+| --- | --- | --- |
+| `lang` | `latin` | `latin` or `english`. Anything else falls back to Latin |
+| `sentences` | `5` | Sentences per paragraph. `-1` picks 1–5 at random |
+| `paragraphs` | `1` | Joined by a blank line |
+| `seed` | — | Omit for fresh copy; set for repeatable output |
+| `theme` | *OS* | `light` or `dark` |
+
+Properties mirror the attributes, plus `text` (what it rendered) and
+`regenerate()` (fresh copy; a seeded element rerolls identically).
+
+**`lang="english"` is the one worth reaching for.** Latin is the convention, but its
+word lengths and letter frequencies are not English's — a column that survives Cicero
+can still break on business-speak, which is the register your real copy is written in.
+
+The generator is pure and DOM-free, so it is useful well beyond the element — seeding a
+mock chat, filling a fixture, stress-testing a column:
+
+```js
+import { loremIpsum, loremSentence, WORD_BANKS } from '@machfivetechchicago/machvive-webmcp-ai';
+
+loremIpsum({ sentences: 2, lang: 'english' });
+loremIpsum({ paragraphs: 3, seed: 42 });   // identical every call
+loremSentence({ lang: 'english' });
+```
+
+**Seeds matter more than they look.** Without one, a page regenerates different copy on
+every render, which turns a visual diff into noise and makes a screenshot worthless as a
+regression check.
+
+Ported from the [Lorem Ipsum Generator](https://www.thescottkrause.com/devtoys/lorem_ipsum_generator/).
 
 ## TypeScript
 

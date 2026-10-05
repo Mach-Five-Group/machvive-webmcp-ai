@@ -48,6 +48,22 @@ All tags are prefixed `machvive-`.
 
 **These modules are browser-only by construction.** `class X extends HTMLElement` is evaluated at module load, so importing any entry point where no DOM exists throws `ReferenceError: HTMLElement is not defined`. That is why the test suite installs jsdom globals via `--import ./test/setup.js` before anything loads, and why [README.md](README.md) documents a client-only import path for SSR frameworks. Don't "fix" this by lazily declaring the classes — self-registration on import is the feature; the constraint is inherent to custom elements.
 
+## The lorum ipsum component
+
+[generator.js](src/wc/machvive-lorum-ipsum/generator.js) is pure and DOM-free; the element is a thin renderer over it. Both are exported from [index.js](index.js), because fixtures and mock conversations want the string, not an element.
+
+The word banks are ported from the [Lorem Ipsum Generator](https://www.thescottkrause.com/devtoys/lorem_ipsum_generator/) — Latin from Cicero's *De finibus*, and English business-speak. Keep both; the English bank is the point. Latin's word lengths and letter frequencies are not English's, so a column that survives Cicero can still break on the register real copy is written in.
+
+Behaviours to preserve:
+- **Slotted content always wins.** The element has projected light DOM since its first release and pages depend on it; generated copy is only the fallback.
+- **Dedupe is per sentence, not global.** The original deduped against the whole output with a *substring* match, which silently starved later sentences — once `dolorem` appeared, `dolor` could never follow, and short words like `a` were excluded outright. Real prose repeats words; only a sentence reads badly when it does.
+- **The attempt loop is capped.** Exact-word dedupe with a target larger than the bank would otherwise never terminate. A test asserts a 400-word sentence completes and is bounded by the bank size.
+- **`theme` does not regenerate.** It is pure CSS here. Re-rendering for it would mean toggling dark mode silently rewrote every placeholder on the page — and a test that seeds the element cannot see that bug, so that test is deliberately unseeded.
+- **Copy renders with `textContent`.** Today that is indistinguishable from `innerHTML` because no bank word contains `<` or `&` — which is exactly why a test asserts that invariant. The day a word bank gains one, it fails and points at the right place.
+- **`:host` sets `color` but no `background`.** The deliberate exception, like the floating inspector: placeholder copy stands in for a page's own text and has to sit on whatever surface hosts it. That is also why it is outside the strict theme tests.
+
+Seeds are not a convenience. Without one a page regenerates different copy on every render, which turns a visual diff into noise and makes a screenshot worthless as a regression check.
+
 ## The WebMCP polyfill
 
 [machvive-webmcp-polyfill.js](src/wc/machvive-webmcp-polyfill/machvive-webmcp-polyfill.js) is the one component that does more than render. It shims `navigator.modelContext` per the [W3C WebMCP proposal](https://webmachinelearning.github.io/webmcp/docs/proposal.html) — `registerTool` / `unregisterTool` / `provideContext`, with tool descriptors carrying `name`, `description`, `inputSchema`, and an `execute(params, agent)` handler that resolves to `{ content: [...] }`.

@@ -1,4 +1,11 @@
-export { MachviveLorumIpsum } from './src/wc/machvive-lorum-ipsum/machvive-lorum-ipsum.js';
+export {
+  MachviveLorumIpsum,
+  loremIpsum,
+  loremSentence,
+  LANGUAGES,
+  WORD_BANKS
+} from './src/wc/machvive-lorum-ipsum/machvive-lorum-ipsum.js';
+export type { LoremLanguage, LoremOptions } from './src/wc/machvive-lorum-ipsum/machvive-lorum-ipsum.js';
 export {
   MachviveWebmcpPolyfill,
   installWebmcpPolyfill,
