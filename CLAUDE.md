@@ -62,6 +62,10 @@ Behaviours to preserve:
 - **Copy renders with `textContent`.** Today that is indistinguishable from `innerHTML` because no bank word contains `<` or `&` — which is exactly why a test asserts that invariant. The day a word bank gains one, it fails and points at the right place.
 - **`:host` sets `color` but no `background`.** The deliberate exception, like the floating inspector: placeholder copy stands in for a page's own text and has to sit on whatever surface hosts it. That is also why it is outside the strict theme tests.
 
+- **A connected element publishes `generate_placeholder_text`.** It exists so a page has a real tool for the inspector to exercise on day one, and it is safe to hand out: pure text, no network, no storage. Tool names are a page-wide namespace, so ownership is module-scoped — the first connected element registers, and hands over to a survivor when removed. Counting registrations cannot test this (the registry is keyed by name, so three registrations collapse to one entry); the test asserts *which* element the call drives.
+- **Releasing is guarded to the owner.** A non-owner unregistering and re-registering fires the change event twice, and the inspector re-renders on it — so removing an unrelated placeholder block would wipe a form someone was filling in.
+- **The module imports the polyfill.** Registering against a registry that might not exist yet is exactly how analytics shipped capturing nothing. The cost is that the `/lorum-ipsum` subpath now installs the polyfill; that is the intended trade.
+
 Seeds are not a convenience. Without one a page regenerates different copy on every render, which turns a visual diff into noise and makes a screenshot worthless as a regression check.
 
 ## The WebMCP polyfill

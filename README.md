@@ -30,7 +30,7 @@ elements with Shadow DOM that work anywhere `customElements` does.
 | WebMCP inspector | `<machvive-webmcp-inspect>` | Lists registered tools, builds a form from each schema, runs them |
 | WebMCP analytics | `<machvive-webmcp-analytics>` | Captures every tool call for listing, editing, export, replay, and dataLayer |
 | M5T Magnet | `<machvive-m5t-magnet>` | Exposes a MachFive Magnet's lead capture to agents |
-| Lorum Ipsum | `<machvive-lorum-ipsum>` | Generates placeholder copy — Latin, or English business-speak |
+| Lorum Ipsum | `<machvive-lorum-ipsum>` | Generates placeholder copy, and publishes it as a WebMCP tool |
 
 📖 **[Read the full guide on the Wiki](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/Machvive-WebMCP-Polyfill-Web-Component-Lib)** — what WebMCP is and why it beats
 scripted clicking, how the components compose, and the constraints worth knowing
@@ -432,6 +432,37 @@ loremSentence({ lang: 'english' });
 **Seeds matter more than they look.** Without one, a page regenerates different copy on
 every render, which turns a visual diff into noise and makes a screenshot worthless as a
 regression check.
+
+### It publishes a tool
+
+A connected `<machvive-lorum-ipsum>` registers `generate_placeholder_text` on
+`navigator.modelContext`, so a page has something real for an agent — or the
+[inspector](#inspector) — to call before its author has written a tool of their own.
+Open the inspector, pick the tool, fill in the form, run it, and the copy on the page
+changes. That is the whole WebMCP loop, verifiable on day one.
+
+It is a deliberately safe tool to hand out: pure text generation, no network, no
+storage, no state beyond the element itself.
+
+| Parameter | Type | |
+| --- | --- | --- |
+| `lang` | enum | `latin` or `english` — renders as a select |
+| `sentences` | integer | per paragraph; `-1` randomises 1–5 |
+| `paragraphs` | integer | |
+| `seed` | integer | omit for fresh copy |
+
+One tool per page however many blocks you place — tool names are a page-wide
+namespace, so the first connected element owns it and hands it on if it is removed.
+Add `no-tool` to opt a block out, or to every block to publish nothing.
+
+```html
+<machvive-lorum-ipsum no-tool></machvive-lorum-ipsum>
+```
+
+Because of this, importing `@machfivetechchicago/machvive-webmcp-ai/lorum-ipsum`
+installs the polyfill too. That is deliberate — a component that registers tools
+against a registry that may not exist yet is how the analytics component once shipped
+capturing nothing.
 
 Ported from the [Lorem Ipsum Generator](https://www.thescottkrause.com/devtoys/lorem_ipsum_generator/).
 

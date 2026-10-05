@@ -1,7 +1,25 @@
 import { THEME_CSS } from '../shared/theme.js';
 import { loremIpsum, loremSentence, LANGUAGES } from './generator.js';
+// Imported for its side effect as well as the constant: the polyfill installs on
+// load, so a page gets `navigator.modelContext` whichever module it reaches for
+// first. Analytics shipped without this import once and captured nothing,
+// because the documented import order left it registering against no registry.
+import { TOOLS_CHANGED_EVENT } from '../machvive-webmcp-polyfill/machvive-webmcp-polyfill.js';
 
 export { loremIpsum, loremSentence, LANGUAGES, WORD_BANKS } from './generator.js';
+export { TOOLS_CHANGED_EVENT };
+
+/** The tool this element publishes. One per page, whatever the element count. */
+export const PLACEHOLDER_TOOL = 'generate_placeholder_text';
+
+/**
+ * Which element currently owns the tool.
+ *
+ * Module-scoped rather than per instance, because tool names are a page-wide
+ * namespace: three placeholder blocks must not race to register three tools
+ * under one name, each silently replacing the last.
+ */
+let owner = null;
 
 /**
  * Placeholder copy that generates itself.
@@ -20,7 +38,7 @@ export class MachviveLorumIpsum extends HTMLElement {
   #text = '';
 
   static get observedAttributes() {
-    return ['lang', 'sentences', 'paragraphs', 'seed', 'theme'];
+    return ['lang', 'sentences', 'paragraphs', 'seed', 'theme', 'no-tool'];
   }
 
   constructor() {
@@ -103,12 +121,24 @@ ${THEME_CSS}
       <slot></slot>
     `;
     this.#render();
+    this.#claimTool();
+  }
+
+  disconnectedCallback() {
+    this.#releaseTool();
   }
 
   attributeChangedCallback(name) {
+    if (!this.shadowRoot?.childElementCount) return;
     // `theme` is handled entirely by the CSS above. Re-rendering for it would
     // regenerate the copy, so toggling dark mode would silently rewrite the page.
-    if (name === 'theme' || !this.shadowRoot?.childElementCount) return;
+    if (name === 'theme') return;
+    // Likewise `no-tool`: it changes what is published, not what is displayed.
+    if (name === 'no-tool') {
+      if (this.hasAttribute('no-tool')) this.#releaseTool();
+      else this.#claimTool();
+      return;
+    }
     this.#render();
   }
 
@@ -137,6 +167,63 @@ ${THEME_CSS}
       node.textContent = paragraph;
       return node;
     }));
+  }
+
+  /**
+   * Publishes the generator as a WebMCP tool.
+   *
+   * It is here so a page that installs the polyfill has something real for an
+   * agent — or the inspector — to call on day one, without the author first
+   * writing a tool of their own. It is a deliberately safe one to hand out:
+   * pure text generation, no network, no storage, no state beyond this element.
+   */
+  #claimTool() {
+    if (owner || this.hasAttribute('no-tool')) return;
+    const context = globalThis.navigator?.modelContext;
+    if (!context) return;
+
+    owner = this;
+    context.registerTool({
+      name: PLACEHOLDER_TOOL,
+      description:
+        'Generate placeholder copy and show it on the page. Latin reads as classic ' +
+        'lorem ipsum; English is business-speak, which is better for judging whether ' +
+        'a layout survives the text it will really hold.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          lang: { type: 'string', enum: [...LANGUAGES], description: 'Vocabulary to draw from' },
+          sentences: { type: 'integer', description: 'Sentences per paragraph. -1 picks 1-5 at random' },
+          paragraphs: { type: 'integer', description: 'How many paragraphs' },
+          seed: { type: 'integer', description: 'Omit for fresh copy; set for repeatable output' }
+        }
+      },
+      execute: async (params = {}) => {
+        // Only forward what was actually supplied, so the element's own
+        // attributes remain the defaults rather than being overwritten by
+        // undefined on every call.
+        for (const key of ['lang', 'sentences', 'paragraphs', 'seed']) {
+          if (params[key] !== undefined && params[key] !== '') this[key] = params[key];
+        }
+        const text = this.regenerate();
+        return { content: [{ type: 'text', text }] };
+      }
+    });
+  }
+
+  #releaseTool() {
+    if (owner !== this) return;
+    globalThis.navigator?.modelContext?.unregisterTool(PLACEHOLDER_TOOL);
+    owner = null;
+
+    // Hand the tool to another placeholder still on the page, so removing one
+    // block does not quietly take the page's only tool with it.
+    for (const candidate of globalThis.document?.querySelectorAll?.('machvive-lorum-ipsum') ?? []) {
+      if (candidate !== this && candidate.isConnected && candidate instanceof MachviveLorumIpsum) {
+        candidate.#claimTool();
+        break;
+      }
+    }
   }
 }
 

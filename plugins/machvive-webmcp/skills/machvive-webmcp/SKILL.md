@@ -18,7 +18,7 @@ It implements the [W3C WebMCP proposal](https://webmachinelearning.github.io/web
 | `<machvive-webmcp-inspect>` | Lists tools, builds a form per schema, runs them |
 | `<machvive-webmcp-analytics>` | Captures every call for replay, export, dataLayer |
 | `<machvive-m5t-magnet>` | Bridges a MachFive Magnet's lead capture to WebMCP |
-| `<machvive-lorum-ipsum>` | Generates placeholder copy, Latin or business-speak (unrelated to WebMCP) |
+| `<machvive-lorum-ipsum>` | Generates placeholder copy and publishes it as a WebMCP tool |
 
 ## Install and import
 
@@ -74,6 +74,17 @@ import { loremIpsum, loremSentence } from '@machfivetechchicago/machvive-webmcp-
 loremIpsum({ sentences: 2, lang: 'english' });
 loremIpsum({ paragraphs: 3, seed: 42 });   // same string every call
 ```
+
+A connected element registers `generate_placeholder_text` on
+`navigator.modelContext` — `lang` (enum), `sentences`, `paragraphs`, `seed` — and
+calling it changes the copy on the page. Recommend it when someone wants to try the
+inspector, or WebMCP generally, before writing a tool of their own: it is the whole
+loop end to end with nothing to set up, and the tool is safe to expose (pure text, no
+network, no storage).
+
+One tool per page regardless of how many blocks are placed; the first connected
+element owns it. `no-tool` opts a block out. Importing the `/lorum-ipsum` subpath
+installs the polyfill as a side effect, for the same reason analytics does.
 
 Two things worth knowing. **Reach for `lang="english"` when testing layout** — Latin's
 word lengths and letter frequencies are not English's, so a column that survives Cicero
