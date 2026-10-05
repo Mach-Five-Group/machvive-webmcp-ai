@@ -1,5 +1,6 @@
 import { test, describe, before } from 'node:test';
 import assert from 'node:assert/strict';
+import { THEME_CSS } from '../src/wc/shared/theme.js';
 
 describe('<machvive-lorum-ipsum>', () => {
   before(async () => {
@@ -43,6 +44,37 @@ describe('<machvive-lorum-ipsum>', () => {
     assert.equal(assigned.length, 1);
     assert.equal(assigned[0].textContent, 'Custom copy');
     el.remove();
+  });
+});
+
+describe('<machvive-lorum-ipsum> theming safety', () => {
+  const css = () => {
+    const el = document.createElement('machvive-lorum-ipsum');
+    document.body.append(el);
+    const text = el.shadowRoot.querySelector('style').textContent;
+    el.remove();
+    return text;
+  };
+
+  test('the default palette inherits rather than following the OS', () => {
+    // Measured 1.21:1 when this set --mv-fg: a dark-mode colour on a page that
+    // stayed light. A text element that follows prefers-color-scheme
+    // independently of its container is wrong whenever the container disagrees.
+    // Strip THEME_CSS first: its own `:host { --mv-*: ... }` token block comes
+    // earlier in the stylesheet and would be matched instead.
+    const own = css().replace(THEME_CSS, '');
+    const bare = own.match(/:host\s*\{([^}]*)\}/s)[1];
+    assert.match(bare, /color:\s*inherit/, ':host should inherit its colour');
+    assert.ok(!/color:\s*var\(--mv-/.test(bare), ':host must not set a themed colour');
+  });
+
+  test('any rule that themes the text also paints the surface', () => {
+    // The rule the whole package learned the hard way.
+    const own = css().replace(THEME_CSS, '');
+    for (const [, selector, body] of own.matchAll(/(:host\([^)]*\)(?:,\s*:host\([^)]*\))*)\s*\{([^}]*)\}/g)) {
+      if (!/color:\s*var\(--mv-/.test(body)) continue;
+      assert.match(body, /background:/, `${selector} themes text without painting a background`);
+    }
   });
 });
 

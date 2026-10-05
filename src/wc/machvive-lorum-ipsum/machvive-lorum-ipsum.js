@@ -109,11 +109,26 @@ ${THEME_CSS}
           display: block;
           font-family: system-ui, -apple-system, sans-serif;
           line-height: 1.6;
-          /* No background on purpose. Placeholder copy stands in for a page's own
-             text, so it has to sit on whatever surface hosts it — a card, a table
-             cell, a chat bubble. That makes it the same deliberate exception the
-             floating inspector is, and why it is outside the strict theme tests. */
+          /* Inherit, and paint nothing. Placeholder copy stands in for a page's
+             own text, so it belongs in whatever a card, table cell or chat
+             bubble already uses.
+             This is not a style preference. Setting a themed colour here
+             measured 1.21:1 in three of six OS-preference x theme combinations —
+             light text on a light page — because the component followed the OS
+             while its host did not. A page decides its own palette; a text
+             element that follows prefers-color-scheme independently of its
+             container is wrong exactly whenever the container disagrees. */
+          color: inherit;
+        }
+
+        /* An explicit choice is different: the author asked for this block to
+           carry a palette, so it must paint the surface that palette assumes.
+           A component that themes its own text and leaves the background to
+           chance is how analytics once rendered at 1.21:1. */
+        :host([theme="dark"]),
+        :host([theme="light"]) {
           color: var(--mv-fg);
+          background: var(--mv-bg);
         }
         p { margin: 0 0 0.75em; }
         p:last-child { margin-bottom: 0; }
