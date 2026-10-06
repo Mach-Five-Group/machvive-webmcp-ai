@@ -544,6 +544,7 @@ Use the dynamic `import()` form shown above.
 | --- | --- |
 | [webmcp-playground](https://mach-five-group.github.io/webmcp-playground/) · [source](https://github.com/Mach-Five-Group/webmcp-playground) | A live page built with these components, publishing callable tools over HTTPS |
 | [webmcp-browser-use](https://github.com/Mach-Five-Group/webmcp-browser-use) | Drive that page with a real AI agent — discovers the tools and calls them, never touching the DOM |
+| [WebMCP Directory listing](https://webmcp.com/sites/machvive.com) | What an independent crawler finds on machvive.com — all seven tools it exposes, with their descriptions |
 
 ## Documentation
 
