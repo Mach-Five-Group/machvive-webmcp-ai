@@ -553,10 +553,9 @@ The **[project Wiki](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki)
 | | |
 | --- | --- |
 | [WebMCP as a Business Accelerator](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/WebMCP-as-a-Business-Accelerator) | Why an agent is not just another visitor, and what that changes for a business |
-| [Agent Topologies](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/Agent-Topologies) | The two ways an agent reaches your page, and why the examples only show one |
+| [WebMCP Canonical Use Cases](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/WebMCP-Canonical-Use-Cases) | The two ways an agent reaches your page, and why the examples only show one |
 | [Machvive WebMCP Polyfill Web Component Lib](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/Machvive-WebMCP-Polyfill-Web-Component-Lib) | Full guide: the components, how they compose, adoption constraints |
 | [Magnet Integration](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/Magnet-Integration) | Exposing a MachFive Magnet's lead capture to agents |
-| [WebMCP Chat Bridge](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/WebMCP-Chat-Bridge) | Wiring an in-page chat component to the page's own tools |
 
 ## License
 
