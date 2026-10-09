@@ -112,6 +112,7 @@ describe('bulk import', () => {
       'machvive-webmcp-polyfill',
       'machvive-webmcp-inspect',
       'machvive-webmcp-analytics',
+      'machvive-webmcp-products',
       'machvive-m5t-magnet'
     ]) {
       assert.ok(customElements.get(tag), `${tag} was not registered`);
@@ -129,13 +130,19 @@ describe('bulk import', () => {
       'MachviveWebmcpAnalytics',
       'MachviveWebmcpInspect',
       'MachviveWebmcpPolyfill',
+      'MachviveWebmcpProducts',
+      'PRODUCT_TOOLS',
       'TOOLS_CHANGED_EVENT',
       'WORD_BANKS',
       'callLog',
+      'collectProducts',
+      'facetsOf',
       'installAnalytics',
       'installWebmcpPolyfill',
       'loremIpsum',
-      'loremSentence'
+      'loremSentence',
+      'normalizeProduct',
+      'readDocumentJsonLd'
     ]);
 
     const declared = readFileSync(

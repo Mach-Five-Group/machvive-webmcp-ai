@@ -94,6 +94,27 @@ Three behaviors to preserve when editing it:
 
 Neither component may auto-emit to `window.dataLayer`; that is opt-in via the `datalayer` attribute so importing the module never produces tracking traffic.
 
+## The products component
+
+[machvive-webmcp-products](src/wc/machvive-webmcp-products/machvive-webmcp-products.js) reads the page's schema.org JSON-LD and publishes `search_products`, `get_product` and `list_product_facets`. Its pitch is that the markup already exists for SEO, so there is no backend to build — which means the component is only as good as its tolerance for markup it did not write.
+
+[jsonld.js](src/wc/machvive-webmcp-products/jsonld.js) is where that lives, and it is exported independently because it is useful without the element. Things it must keep handling, each one real:
+- Containers: `@graph`, `ItemList`/`itemListElement`/`ListItem`, bare arrays, a lone `Product`, and a `Product` nested somewhere nobody anticipated. **It walks recursively rather than enumerating known shapes** — enumerating is a losing game.
+- `@type` as a string, an array, or a full URL. `brand`, `category` and `seller` as a string or a node. `image` as a URL, an array or an `ImageObject`.
+- `offers` as an object or an array, where **the first entry is not always the usable one** — a stub offer carrying only a url is common. `AggregateOffer` reports `lowPrice`, because "from $198" is actionable and a midpoint nobody can pay is not.
+- Prices as decorated strings (`"$1,299.00"`), and `availability`/`itemCondition` as schema.org URLs that must be reduced to bare tokens or the enum is unusable.
+- Any `gtin` flavour collapsed into one field; dedupe by sku → gtin → url → name, **keeping the richer record** when the same product appears in both an ItemList and a BreadcrumbList.
+- A malformed JSON-LD block must be skipped, not fatal. Pages carry generated blocks beside a hand-written one, and the hand-written one has the trailing comma.
+
+Behaviours to preserve in the component:
+- **Read-only.** No tool it registers may mutate anything; a test fails on a registered name containing add/buy/order/cart/checkout/update/delete/set. That is what makes auto-publishing safe and why it holds no credentials.
+- **Filter enums are derived from the page's own data**, and must be rebuilt by `load()`. Stale enums offer choices that match nothing. An empty facet emits *no* enum rather than `enum: []`, which would render a select with nothing in it.
+- **Results are capped** (default 10, max 50) with an explicit `truncated` flag. An agent that cannot tell a page from a complete answer will report "there are 10 products". Search returns a summary; only `get_product` returns the full record and the raw JSON-LD.
+- **A price filter excludes unpriced products.** An unknown price is not "cheap enough", and `null > max` being false is the easy way to get this wrong.
+- **Ownership is module-scoped with a liveness check**, like the lorem component, for the same `provideContext` reason.
+
+Two tests in this area were originally passing for the wrong reason and are worth not re-breaking: the `limit` clamp needs a catalogue larger than `MAX_LIMIT` to be observable at all, and the unpriced-product test must reload the *owning* element — mounting a second one leaves the first in charge of the tools, so the call answers from stale data.
+
 ## Theming
 
 [shared/theme.js](src/wc/shared/theme.js) holds the only copy of the palette; both UI components interpolate `THEME_CSS` at the top of their stylesheet. Rules to keep:

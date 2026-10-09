@@ -12,6 +12,14 @@ import {
   TOOLS_CHANGED_EVENT
 } from './src/wc/machvive-webmcp-polyfill/machvive-webmcp-polyfill.js';
 import { MachviveWebmcpInspect } from './src/wc/machvive-webmcp-inspect/machvive-webmcp-inspect.js';
+import {
+  MachviveWebmcpProducts,
+  PRODUCT_TOOLS,
+  collectProducts,
+  normalizeProduct,
+  readDocumentJsonLd,
+  facetsOf
+} from './src/wc/machvive-webmcp-products/machvive-webmcp-products.js';
 import { MachviveM5tMagnet } from './src/wc/machvive-m5t-magnet/machvive-m5t-magnet.js';
 import {
   MachviveWebmcpAnalytics,
@@ -24,6 +32,12 @@ import {
 // Export them all from a single entry point
 export {
   MachviveLorumIpsum,
+  MachviveWebmcpProducts,
+  PRODUCT_TOOLS,
+  collectProducts,
+  normalizeProduct,
+  readDocumentJsonLd,
+  facetsOf,
   loremIpsum,
   loremSentence,
   LANGUAGES,

@@ -29,6 +29,7 @@ elements with Shadow DOM that work anywhere `customElements` does.
 | WebMCP polyfill | `<machvive-webmcp-polyfill>` | Shims `navigator.modelContext` so a page can expose tools to AI agents |
 | WebMCP inspector | `<machvive-webmcp-inspect>` | Lists registered tools, builds a form from each schema, runs them |
 | WebMCP analytics | `<machvive-webmcp-analytics>` | Captures every tool call for listing, editing, export, replay, and dataLayer |
+| Products | `<machvive-webmcp-products>` | Turns the page's schema.org JSON-LD into searchable, read-only tools |
 | M5T Magnet | `<machvive-m5t-magnet>` | Exposes a MachFive Magnet's lead capture to agents |
 | Lorum Ipsum | `<machvive-lorum-ipsum>` | Generates placeholder copy, and publishes it as a WebMCP tool |
 
@@ -328,6 +329,68 @@ Options: Evaluating MachVive | Building with it and need help | ...
 `magnet-ready` when tools register, `magnet-capture` when a visitor submits, and
 `magnet-error` if the runtime never loads. The element also exposes `.config`
 (the magnet definition it bound to) and `.captures`.
+
+## 🛒 Products from JSON-LD
+
+```html
+<machvive-webmcp-products></machvive-webmcp-products>
+```
+
+That is the whole integration. The component reads the schema.org `Product`
+markup already on your page — the JSON-LD you publish so search engines
+understand your catalogue — and exposes it as three read-only tools.
+
+**The work is already done.** Sites carry this markup because search rewards it,
+and somebody is already keeping it current. No backend, no new API, nothing to
+keep in sync: the catalogue an agent wants is the one your SEO team maintains.
+
+| Tool | |
+| --- | --- |
+| `search_products` | Free text plus `category`, `brand`, `availability`, `minPrice`, `maxPrice`, `limit`, `offset` |
+| `get_product` | One product in full by SKU, MPN or GTIN, including its original JSON-LD |
+| `list_product_facets` | The categories, brands, stock states and price range present on the page |
+
+**Filter values come from your data.** `category`, `brand` and `availability` are
+declared as enums built from the products actually on the page, so an agent never
+guesses a category name that does not exist — and because the inspector renders an
+enum as a `<select>`, you get working dropdowns with no configuration. Change the
+catalogue and call `load()`; the enums follow.
+
+**Read-only by construction.** It searches and reads. It does not add to a cart,
+place an order or submit anything, which is why it is safe to publish
+automatically and why it needs no credentials. A test asserts no registered tool
+name contains a mutating verb.
+
+### Attributes
+
+| Attribute | |
+| --- | --- |
+| `src` | Optional JSON-LD URL. Omit to read the page's own markup |
+| `no-tool` | Read the data but publish nothing |
+| `theme` | `light` or `dark` |
+
+```js
+const el = document.querySelector('machvive-webmcp-products');
+el.products;        // the normalized catalogue
+el.facets;          // categories, brands, availability, price range
+await el.load();    // re-read and republish after the page's JSON-LD changes
+```
+
+### It handles the markup you actually have
+
+The normalizer is the substance here, and it is exported on its own
+(`collectProducts`, `normalizeProduct`, `facetsOf`, `readDocumentJsonLd`) because
+it is useful without the element. Real JSON-LD is correct-but-inconsistent, so it
+copes with `@graph`, `ItemList`/`itemListElement`, bare arrays, a lone `Product`,
+`@type` as an array or a full URL, `brand` as a string or a node, `offers` as an
+object or an array, `AggregateOffer` price ranges, every `gtin` flavour, prices as
+decorated strings, and `availability` arriving as `https://schema.org/InStock`
+rather than a word. A malformed block is skipped rather than taking the page's
+other blocks down with it.
+
+One tool set per page however many elements you place; the first owns it and hands
+over if removed. Results are capped at 50 with a default of 10 and a `truncated`
+flag, because a tool result lands in an agent's context window.
 
 ## 🌓 Theming
 

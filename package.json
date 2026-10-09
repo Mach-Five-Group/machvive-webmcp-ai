@@ -1,6 +1,6 @@
 {
   "name": "@machfivetechchicago/machvive-webmcp-ai",
-  "version": "6.6.1",
+  "version": "6.7.0",
   "description": "I don't want to use your product's agent; I want my agent to be able to use your product.",
   "keywords": [
     "WebMCP",
@@ -43,6 +43,10 @@
     "./webmcp-inspect": {
       "types": "./src/wc/machvive-webmcp-inspect/machvive-webmcp-inspect.d.ts",
       "default": "./src/wc/machvive-webmcp-inspect/machvive-webmcp-inspect.js"
+    },
+    "./webmcp-products": {
+      "types": "./src/wc/machvive-webmcp-products/machvive-webmcp-products.d.ts",
+      "default": "./src/wc/machvive-webmcp-products/machvive-webmcp-products.js"
     },
     "./webmcp-analytics": {
       "types": "./src/wc/machvive-webmcp-analytics/machvive-webmcp-analytics.d.ts",
