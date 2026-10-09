@@ -392,6 +392,13 @@ One tool set per page however many elements you place; the first owns it and han
 over if removed. Results are capped at 50 with a default of 10 and a `truncated`
 flag, because a tool result lands in an agent's context window.
 
+Every bound is declared on the schema as well as enforced — `limit` carries
+`minimum`/`maximum`/`default`, prices carry `minimum`, and free text carries
+`maxLength`. A constraint that lives only in a description is invisible to a
+validator and to an agent planning a call. Over-long text is refused with a
+reason rather than truncated, because shortening a query answers a question the
+agent did not ask.
+
 ## 🌓 Theming
 
 The UI components follow the viewer's OS preference automatically — no

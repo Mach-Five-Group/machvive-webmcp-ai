@@ -30,6 +30,9 @@ let owner = null;
 /** A tool result lands in an agent's context window; a whole catalogue must not. */
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
+/** Declared on the schema as well as enforced, so a validator can see them. */
+const MAX_QUERY = 200;
+const MAX_ID = 100;
 
 /** The compact projection returned by search. `get_product` returns everything. */
 const summarize = (p) => ({
@@ -172,16 +175,25 @@ ${THEME_CSS}
       inputSchema: {
         type: 'object',
         properties: {
-          query: { type: 'string', description: 'Free text matched against name, description, SKU, brand and category' },
+          // Every bound the code enforces is also declared. A constraint stated
+          // only in prose is invisible to a validator and to an agent planning a
+          // call — it finds out by having its input silently clamped.
+          query: {
+            type: 'string', maxLength: MAX_QUERY,
+            description: 'Free text matched against name, description, SKU, brand and category'
+          },
           // Enums come from the page's own data, so an agent never has to guess
           // a category name — and the inspector renders them as a select.
           category: { type: 'string', description: 'Exact category', ...enumOf(facets.categories) },
           brand: { type: 'string', description: 'Exact brand', ...enumOf(facets.brands) },
           availability: { type: 'string', description: 'Stock status', ...enumOf(facets.availability) },
-          maxPrice: { type: 'number', description: 'Only products at or below this price' },
-          minPrice: { type: 'number', description: 'Only products at or above this price' },
-          limit: { type: 'integer', description: `Maximum results (default ${DEFAULT_LIMIT}, max ${MAX_LIMIT})` },
-          offset: { type: 'integer', description: 'Skip this many matches, for paging' }
+          maxPrice: { type: 'number', minimum: 0, description: 'Only products at or below this price' },
+          minPrice: { type: 'number', minimum: 0, description: 'Only products at or above this price' },
+          limit: {
+            type: 'integer', minimum: 1, maximum: MAX_LIMIT, default: DEFAULT_LIMIT,
+            description: `Maximum results (default ${DEFAULT_LIMIT}, max ${MAX_LIMIT})`
+          },
+          offset: { type: 'integer', minimum: 0, default: 0, description: 'Skip this many matches, for paging' }
         }
       },
       execute: async (params = {}) => this.#search(params)
@@ -192,7 +204,7 @@ ${THEME_CSS}
       description: 'Fetch one product in full by SKU, MPN or GTIN, including its original JSON-LD.',
       inputSchema: {
         type: 'object',
-        properties: { id: { type: 'string', description: 'A SKU, MPN or GTIN' } },
+        properties: { id: { type: 'string', minLength: 1, maxLength: MAX_ID, description: 'A SKU, MPN or GTIN' } },
         required: ['id']
       },
       execute: async ({ id } = {}) => this.#get(id)
@@ -223,6 +235,11 @@ ${THEME_CSS}
   }
 
   #search({ query, category, brand, availability, maxPrice, minPrice, limit, offset } = {}) {
+    // Reject rather than truncate. Silently shortening a query means answering
+    // a question the agent did not ask, and it has no way to notice.
+    if (typeof query === 'string' && query.length > MAX_QUERY) {
+      return text({ error: `query must be ${MAX_QUERY} characters or fewer`, received: query.length }, true);
+    }
     const needle = typeof query === 'string' ? query.trim().toLowerCase() : '';
     const terms = needle ? needle.split(/\s+/) : [];
 
@@ -257,15 +274,19 @@ ${THEME_CSS}
   }
 
   #get(id) {
-    const needle = String(id ?? '').trim().toLowerCase();
-    if (!needle) return text({ error: 'id is required' }, true);
+    const raw = String(id ?? '').trim();
+    if (!raw) return text({ error: 'id is required' }, true);
+    if (raw.length > MAX_ID) {
+      return text({ error: `id must be ${MAX_ID} characters or fewer`, received: raw.length }, true);
+    }
+    const needle = raw.toLowerCase();
     const found = this.#products.find((p) =>
       [p.sku, p.mpn, p.gtin].filter(Boolean).some((v) => String(v).toLowerCase() === needle));
     if (!found) {
       return text({ error: `no product matches "${id}"`, known: this.#products.length }, true);
     }
-    const { raw, ...rest } = found;
-    return text({ ...rest, jsonld: raw });
+    const { raw: jsonld, ...rest } = found;
+    return text({ ...rest, jsonld });
   }
 }
 

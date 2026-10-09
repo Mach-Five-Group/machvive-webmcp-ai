@@ -64,6 +64,52 @@ describe('<machvive-webmcp-products>', () => {
     assert.deepEqual(schema.availability.enum, ['InStock', 'OutOfStock']);
   });
 
+  test('every documented bound is declared in the schema', async () => {
+    // A constraint stated only in prose is invisible to a validator, and to an
+    // agent planning a call — it finds out by having its input silently
+    // clamped. This was a real finding from a third-party scan.
+    withJsonLd();
+    await mount();
+    const search = named(PRODUCT_TOOLS.SEARCH).inputSchema.properties;
+
+    assert.equal(search.limit.maximum, 50, 'the description promises max 50');
+    assert.equal(search.limit.minimum, 1);
+    assert.equal(search.limit.default, 10, 'the description promises a default of 10');
+    assert.equal(search.offset.minimum, 0);
+    assert.equal(search.minPrice.minimum, 0);
+    assert.equal(search.maxPrice.minimum, 0);
+    assert.ok(search.query.maxLength > 0, 'free text must be bounded');
+
+    const get = named(PRODUCT_TOOLS.GET).inputSchema.properties;
+    assert.ok(get.id.maxLength > 0);
+    assert.equal(get.id.minLength, 1);
+  });
+
+  test('a declared bound matches what the code actually does', async () => {
+    // Declaring a limit the implementation ignores is worse than not declaring
+    // it: the schema becomes a promise nothing keeps.
+    const many = Array.from({ length: 60 }, (_, i) => ({
+      '@type': 'Product', name: `Item ${i}`, sku: `S-${i}`
+    }));
+    withJsonLd(JSON.stringify(many));
+    const el = await mount();
+    const schema = named(PRODUCT_TOOLS.SEARCH).inputSchema.properties;
+    const { data } = await call(PRODUCT_TOOLS.SEARCH, { limit: schema.limit.maximum + 1000 });
+    assert.equal(data.returned, schema.limit.maximum);
+
+    // An over-long query is refused with a reason, not quietly shortened:
+    // truncating answers a question the agent did not ask, and it cannot tell.
+    const long = await call(PRODUCT_TOOLS.SEARCH, { query: 'x'.repeat(schema.query.maxLength + 1) });
+    assert.equal(long.raw.isError, true);
+    assert.match(long.data.error, /query must be \d+ characters or fewer/);
+    assert.equal(long.data.received, schema.query.maxLength + 1);
+
+    // At the limit it is accepted, so the boundary is where it is declared.
+    const atLimit = await call(PRODUCT_TOOLS.SEARCH, { query: 'x'.repeat(schema.query.maxLength) });
+    assert.equal(atLimit.raw.isError, undefined);
+    assert.equal(el.products.length, 60);
+  });
+
   test('no facet values means no empty enum', async () => {
     // An `enum: []` renders a select with nothing in it, which is worse than
     // a free-text box.
@@ -190,6 +236,14 @@ describe('get_product', () => {
     assert.equal(data.rating, 4.8);
     assert.equal(data.description.length > 20, true);
     assert.equal(data.jsonld['@type'], 'Product', 'the untouched node is what a careful agent wants');
+  });
+
+  test('an over-long id is refused with a reason', async () => {
+    withJsonLd(); await mount();
+    const max = named(PRODUCT_TOOLS.GET).inputSchema.properties.id.maxLength;
+    const { raw, data } = await call(PRODUCT_TOOLS.GET, { id: 'x'.repeat(max + 1) });
+    assert.equal(raw.isError, true);
+    assert.match(data.error, /id must be \d+ characters or fewer/);
   });
 
   test('an unknown id is an error result, not a throw', async () => {
