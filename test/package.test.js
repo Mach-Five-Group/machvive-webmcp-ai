@@ -160,6 +160,26 @@ describe('bulk import', () => {
   });
 });
 
+describe('the suite is self-contained', () => {
+  test('no test reads a path outside the repository', () => {
+    // A test that read an absolute path to a developer's machine passed
+    // locally and took its whole file down in CI — 53 tests silently stopped
+    // running, and the failure read as two broken tests rather than two
+    // unloadable files.
+    const dir = new URL('./', import.meta.url);
+    for (const name of readdirSync(dir).filter((f) => f.endsWith('.js'))) {
+      const source = readFileSync(new URL(name, dir), 'utf8');
+      const absolute = [...source.matchAll(/['"`](\/Users\/|\/home\/|[A-Z]:\\)[^'"`]*['"`]/g)].map((m) => m[0]);
+      assert.deepEqual(absolute, [], `${name} reads ${absolute.join(', ')}`);
+    }
+  });
+
+  test('fixtures live beside the tests and stay out of the tarball', () => {
+    assert.ok(existsSync(new URL('./fixtures/products.jsonld.json', import.meta.url)));
+    assert.ok(!pkg.files.includes('test'), 'test/ must not ship');
+  });
+});
+
 describe('network surface', () => {
   test('shipped runtime code contains no external URLs', () => {
     // The package reaches nowhere on its own. Where a hosted magnet is served

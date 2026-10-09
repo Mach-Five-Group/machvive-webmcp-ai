@@ -1,12 +1,13 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import {
   collectProducts, normalizeProduct, facetsOf, readDocumentJsonLd
 } from '../src/wc/machvive-webmcp-products/jsonld.js';
 
 const SAMPLE = JSON.parse(readFileSync(
-  '/Users/neodigm/Documents/2026/m5t/magnet_hvac_b2b/public/assets/products.json', 'utf8'));
+  fileURLToPath(new URL('./fixtures/products.jsonld.json', import.meta.url)), 'utf8'));
 
 const product = (extra = {}) => ({ '@type': 'Product', name: 'Widget', sku: 'W-1', ...extra });
 

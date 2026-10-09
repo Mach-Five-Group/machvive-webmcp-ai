@@ -1,0 +1,142 @@
+{
+  "@context": "https://schema.org",
+  "@type": "ItemList",
+  "name": "Sample Products",
+  "description": "Sample schema.org Product data modeled on HVAC B2B storefront items. Each entry is a valid Product with offers, brand, and identifiers.",
+  "numberOfItems": 4,
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "item": {
+        "@type": "Product",
+        "name": "LF24-SR US Spring Return Damper Actuator",
+        "description": "Spring return damper actuator, 24 V, 35 in-lb torque, for HVAC damper control in commercial applications.",
+        "sku": "LF24-SR US",
+        "mpn": "LF24-SR US",
+        "gtin13": "0849696010914",
+        "brand": {
+          "@type": "Brand",
+          "name": "Belimo"
+        },
+        "image": "https://neodigm.github.io/brand_logo_graphic_design/fantastic/discerning/38.webp",
+        "url": "https://example.com/products/belimo-lf24-sr-us",
+        "category": "HVAC Actuators",
+        "offers": {
+          "@type": "Offer",
+          "url": "https://example.com/products/belimo-lf24-sr-us",
+          "priceCurrency": "USD",
+          "price": "209.99",
+          "priceValidUntil": "2027-10-31",
+          "itemCondition": "https://schema.org/NewCondition",
+          "availability": "https://schema.org/InStock",
+          "seller": {
+            "@type": "Organization",
+            "name": "Example Supply Co."
+          }
+        }
+      }
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "item": {
+        "@type": "Product",
+        "name": "AFB24-SR Fail-Safe Actuator",
+        "description": "Fail-safe proportional damper actuator, 24 V, 180 in-lb torque, spring return on power loss.",
+        "sku": "AFB24-SR",
+        "mpn": "AFB24-SR",
+        "gtin13": "0849696011577",
+        "brand": {
+          "@type": "Brand",
+          "name": "Belimo"
+        },
+        "image": "https://neodigm.github.io/brand_logo_graphic_design/fantastic/discerning/17.webp",
+        "url": "https://example.com/products/belimo-afb24-sr",
+        "category": "HVAC Actuators",
+        "offers": {
+          "@type": "Offer",
+          "url": "https://example.com/products/belimo-afb24-sr",
+          "priceCurrency": "USD",
+          "price": "512.40",
+          "priceValidUntil": "2027-10-31",
+          "itemCondition": "https://schema.org/NewCondition",
+          "availability": "https://schema.org/InStock",
+          "seller": {
+            "@type": "Organization",
+            "name": "Example Supply Co."
+          }
+        },
+        "aggregateRating": {
+          "@type": "AggregateRating",
+          "ratingValue": "4.8",
+          "reviewCount": "17"
+        }
+      }
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "item": {
+        "@type": "Product",
+        "name": "BASrouter BACnet/IP Router",
+        "description": "BACnet/IP to BACnet MS/TP router for building automation network segmentation.",
+        "sku": "BASRT-B",
+        "mpn": "BASRT-B",
+        "gtin13": "0617407311019",
+        "brand": {
+          "@type": "Brand",
+          "name": "Contemporary Controls"
+        },
+        "image": "https://neodigm.github.io/brand_logo_graphic_design/fantastic/discerning/5.webp",
+        "url": "https://example.com/products/contemporary-controls-basrt-b",
+        "category": "Network Devices",
+        "offers": {
+          "@type": "Offer",
+          "url": "https://example.com/products/contemporary-controls-basrt-b",
+          "priceCurrency": "USD",
+          "price": "295.00",
+          "priceValidUntil": "2027-10-31",
+          "itemCondition": "https://schema.org/NewCondition",
+          "availability": "https://schema.org/InStock",
+          "seller": {
+            "@type": "Organization",
+            "name": "Example Supply Co."
+          }
+        }
+      }
+    },
+    {
+      "@type": "ListItem",
+      "position": 4,
+      "item": {
+        "@type": "Product",
+        "name": "LF120 US Damper Actuator",
+        "description": "Non-spring return damper actuator, 120 V, 35 in-lb torque, on/off control.",
+        "sku": "LF120 US",
+        "mpn": "LF120 US",
+        "gtin13": "0849696010853",
+        "brand": {
+          "@type": "Brand",
+          "name": "Belimo"
+        },
+        "image": "https://neodigm.github.io/brand_logo_graphic_design/fantastic/discerning/15.webp",
+        "url": "https://example.com/products/belimo-lf120-us",
+        "category": "HVAC Actuators",
+        "offers": {
+          "@type": "Offer",
+          "url": "https://example.com/products/belimo-lf120-us",
+          "priceCurrency": "USD",
+          "price": "198.75",
+          "priceValidUntil": "2027-10-31",
+          "itemCondition": "https://schema.org/NewCondition",
+          "availability": "https://schema.org/OutOfStock",
+          "seller": {
+            "@type": "Organization",
+            "name": "Example Supply Co."
+          }
+        }
+      }
+    }
+  ]
+}

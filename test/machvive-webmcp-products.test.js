@@ -1,11 +1,12 @@
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import '../src/wc/machvive-webmcp-products/machvive-webmcp-products.js';
 import { PRODUCT_TOOLS } from '../src/wc/machvive-webmcp-products/machvive-webmcp-products.js';
 
 const SAMPLE = readFileSync(
-  '/Users/neodigm/Documents/2026/m5t/magnet_hvac_b2b/public/assets/products.json', 'utf8');
+  fileURLToPath(new URL('./fixtures/products.jsonld.json', import.meta.url)), 'utf8');
 
 const tools = () => navigator.modelContext?.tools ?? [];
 const named = (n) => tools().find((t) => t.name === n);
