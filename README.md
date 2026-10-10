@@ -378,9 +378,19 @@ await el.load();    // re-read and republish after the page's JSON-LD changes
 
 ### It handles the markup you actually have
 
-The normalizer is the substance here, and it is exported on its own
-(`collectProducts`, `normalizeProduct`, `facetsOf`, `readDocumentJsonLd`) because
-it is useful without the element. Real JSON-LD is correct-but-inconsistent, so it
+The normalizer is the substance here, and it ships as its own entry point —
+**importable from Node with no DOM**, because the component subpath pulls in the
+polyfill, which needs a browser:
+
+```js
+// Works in a build step, a CI check, or a plain Node script.
+import { collectProducts, facetsOf } from '@machfivetechchicago/machvive-webmcp-ai/jsonld';
+
+const products = collectProducts(JSON.parse(someJsonLdString));
+console.log(facetsOf(products));   // what an agent could filter on
+```
+
+It is useful well beyond the element. Real JSON-LD is correct-but-inconsistent, so it
 copes with `@graph`, `ItemList`/`itemListElement`, bare arrays, a lone `Product`,
 `@type` as an array or a full URL, `brand` as a string or a node, `offers` as an
 object or an array, `AggregateOffer` price ranges, every `gtin` flavour, prices as

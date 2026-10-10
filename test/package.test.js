@@ -160,6 +160,46 @@ describe('bulk import', () => {
   });
 });
 
+describe('the headless entry point', () => {
+  test('./jsonld is exported', () => {
+    assert.ok(pkg.exports['./jsonld'], 'the normalizer needs a subpath of its own');
+    assert.equal(Object.keys(pkg.exports['./jsonld'])[0], 'types');
+  });
+
+  test('it loads in a process with no DOM at all', () => {
+    // The whole point of the subpath. ./webmcp-products reaches the same code
+    // but drags in the polyfill, which evaluates `class extends HTMLElement`
+    // at module load and throws outside a browser — so CI checks, build steps
+    // and any Node consumer could not use the normalizer at all.
+    //
+    // Run in a child process: this suite has jsdom globals installed, so an
+    // in-process import would prove nothing.
+    const script = `
+      const m = await import(${JSON.stringify(new URL('../src/wc/machvive-webmcp-products/jsonld.js', import.meta.url).href)});
+      if (typeof document !== 'undefined') throw new Error('expected no DOM');
+      const p = m.collectProducts({ '@type': 'Product', name: 'X', sku: 'S',
+        offers: { '@type': 'Offer', price: '9.99', availability: 'https://schema.org/InStock' } });
+      if (p[0].price !== 9.99 || p[0].availability !== 'InStock') throw new Error('bad normalize');
+      process.stdout.write('ok');
+    `;
+    const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8' });
+    assert.equal(out, 'ok');
+  });
+
+  test('the component subpath still requires a DOM, which is why this one exists', () => {
+    const script = `
+      try {
+        await import(${JSON.stringify(new URL('../src/wc/machvive-webmcp-products/machvive-webmcp-products.js', import.meta.url).href)});
+        process.stdout.write('loaded');
+      } catch (error) {
+        process.stdout.write(/HTMLElement is not defined/.test(error.message) ? 'needs-dom' : 'other: ' + error.message);
+      }
+    `;
+    const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8' });
+    assert.equal(out, 'needs-dom', 'if this ever loads headless, the separate subpath may be unnecessary');
+  });
+});
+
 describe('the suite is self-contained', () => {
   test('no test reads a path outside the repository', () => {
     // A test that read an absolute path to a developer's machine passed

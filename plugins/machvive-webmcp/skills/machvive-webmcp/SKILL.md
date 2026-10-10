@@ -98,9 +98,16 @@ Three things worth telling someone:
 - **Results are capped** at 50 (default 10) with a `truncated` flag, because tool
   results land in the agent's context window. Large catalogues page with `offset`.
 
-The normalizer is exported separately (`collectProducts`, `normalizeProduct`,
-`facetsOf`, `readDocumentJsonLd`) and is useful without the element — for a build
-step, a fixture, or checking what an agent would see. It copes with the shapes
+The normalizer has its own entry point and **works in plain Node with no DOM**:
+
+```javascript
+import { collectProducts, facetsOf } from '@machfivetechchicago/machvive-webmcp-ai/jsonld';
+```
+
+Reach for `/jsonld` rather than `/webmcp-products` whenever there is no browser —
+a build step, a CI check, a fixture, or anything asking "what would an agent see
+on this page". The component subpath imports the polyfill and throws outside a
+browser. It copes with the shapes
 real JSON-LD arrives in: `@graph`, `ItemList`, bare arrays, `@type` as an array,
 `brand` as a string or a node, `AggregateOffer` ranges, every `gtin` flavour,
 prices as decorated strings, and `availability` as a schema.org URL. A malformed
