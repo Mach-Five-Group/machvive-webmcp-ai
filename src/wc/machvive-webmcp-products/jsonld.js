@@ -18,8 +18,21 @@ function typesOf(node) {
   return (Array.isArray(raw) ? raw : [raw]).map((t) => String(t).split(/[/#]/).pop());
 }
 
-const isProduct = (node) =>
-  typesOf(node).some((t) => t === 'Product' || t === 'ProductModel' || t === 'IndividualProduct');
+const PRODUCT_TYPES = new Set(['Product', 'ProductModel', 'IndividualProduct', 'ProductGroup']);
+const isProduct = (node) => typesOf(node).some((t) => PRODUCT_TYPES.has(t));
+const isGroup = (node) => typesOf(node).includes('ProductGroup');
+
+/**
+ * Properties a variant inherits from its group when it does not state its own.
+ *
+ * schema.org's variant model: the group carries what is common, each variant
+ * carries only what differs. Shopify emits exactly this, and the variants are
+ * often `{ "@type": "Product", "url": "…" }` and nothing else — so a reader
+ * that treats them as standalone products produces a row per variant with no
+ * name, no brand and no price. Fifty nameless rows is worse than none, because
+ * it looks like it worked.
+ */
+const INHERITED = ['name', 'brand', 'description', 'image', 'category', 'url', 'offers'];
 
 /** schema.org enums arrive as full URLs; the bare token is what a filter can use. */
 const token = (value) => (typeof value === 'string' ? value.split(/[/#]/).pop() : undefined);
@@ -81,6 +94,53 @@ function readOffers(offers) {
   return {};
 }
 
+/** `variesBy` arrives as schema.org URLs; the bare token is what reads well. */
+const variesTokens = (value) =>
+  [].concat(value ?? []).map((v) => token(typeof v === 'string' ? v : v?.['@id'])).filter(Boolean);
+
+/**
+ * Folds a ProductGroup and its variants into a single product.
+ *
+ * One row saying "Men's Tree Runner, $100, 49 variants, varies by size and
+ * colour" is both more useful to an agent and a fraction of the context that 49
+ * rows would cost. The variants' own identifiers are kept so `get_product` can
+ * still resolve a variant SKU to its group.
+ */
+function foldGroup(node) {
+  const base = normalizeProduct(node);
+  const raw = [].concat(node.hasVariant ?? []).filter((v) => v && typeof v === 'object');
+  if (!raw.length) return base;
+
+  const inherited = {};
+  for (const key of INHERITED) if (node[key] !== undefined) inherited[key] = node[key];
+  const members = raw.map((v) => normalizeProduct({ ...inherited, ...v }));
+
+  const prices = members.map((m) => m.price).filter((n) => typeof n === 'number');
+  const skus = members.map((m) => m.sku).filter(Boolean);
+  const gtins = members.map((m) => m.gtin).filter(Boolean);
+
+  return {
+    ...base,
+    // The group often omits a price and leaves it to the variants.
+    price: base.price ?? (prices.length ? Math.min(...prices) : null),
+    priceRange: base.priceRange ?? (prices.length && Math.min(...prices) !== Math.max(...prices)
+      ? { low: Math.min(...prices), high: Math.max(...prices), count: members.length }
+      : base.priceRange),
+    // In stock if anything is. "Out of stock" for a product with one size gone
+    // would be wrong, and it is the answer an agent acts on.
+    availability: base.availability
+      ?? (members.some((m) => m.availability === 'InStock') ? 'InStock'
+        : members.find((m) => m.availability)?.availability),
+    variants: {
+      count: members.length,
+      variesBy: variesTokens(node.variesBy),
+      inStock: members.filter((m) => m.availability === 'InStock').length,
+      skus: skus.slice(0, 50),
+      gtins: gtins.slice(0, 50)
+    }
+  };
+}
+
 /** Flattens one Product node into something a tool schema can describe. */
 export function normalizeProduct(node) {
   const offer = readOffers(node.offers);
@@ -131,7 +191,20 @@ export function collectProducts(input) {
       for (const child of node) visit(child);
       return;
     }
-    if (isProduct(node)) found.push(normalizeProduct(node));
+    // Checked before collecting, not after: a node carrying both `@type:
+    // Product` and `isVariantOf` is a member of a group described elsewhere,
+    // and collecting it first means the guard never fires.
+    if (node.isVariantOf) return;
+
+    if (isProduct(node)) {
+      found.push(isGroup(node) || node.hasVariant ? foldGroup(node) : normalizeProduct(node));
+      // Do not descend into hasVariant: the variants are already folded in, and
+      // collecting them again is precisely the bug this exists to avoid.
+      for (const [key, value] of Object.entries(node)) {
+        if (key !== 'hasVariant' && value && typeof value === 'object') visit(value);
+      }
+      return;
+    }
     for (const value of Object.values(node)) {
       if (value && typeof value === 'object') visit(value);
     }
@@ -154,7 +227,16 @@ function dedupe(products) {
     const existing = byKey.get(key);
     if (!existing || score(product) > score(existing)) byKey.set(key, product);
   }
-  return [...byKey.values()];
+
+  // Second pass, by name. A product described richly in one place and by name
+  // alone in another keys differently in the pass above and survives twice —
+  // `aggregateRating.itemReviewed: { "@type": "Product", "name": "…" }` is the
+  // common case, and it produced a ghost row beside the real one.
+  const kept = [...byKey.values()];
+  const identified = new Set(
+    kept.filter((p) => p.sku || p.gtin || p.url).map((p) => p.name).filter(Boolean)
+  );
+  return kept.filter((p) => (p.sku || p.gtin || p.url) || !identified.has(p.name));
 }
 
 const score = (p) => Object.values(p).filter((v) => v !== undefined && v !== null).length;

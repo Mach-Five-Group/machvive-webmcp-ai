@@ -43,7 +43,12 @@ const summarize = (p) => ({
   price: p.price,
   currency: p.currency,
   availability: p.availability,
-  url: p.url
+  url: p.url,
+  // Only when there are variants. "3 variants, varies by size and colour" is
+  // the difference between one useful row and an agent asking what the options
+  // are — and it is a fraction of the context 49 rows would cost.
+  ...(p.variants ? { variants: p.variants.count, variesBy: p.variants.variesBy } : {}),
+  ...(p.priceRange ? { priceFrom: p.priceRange.low, priceTo: p.priceRange.high } : {})
 });
 
 const haystack = (p) =>
@@ -171,7 +176,8 @@ ${THEME_CSS}
       name: PRODUCT_TOOLS.SEARCH,
       description:
         'Search the products this page describes. Combine free text with filters. ' +
-        'Returns a compact summary of each match; use get_product for the full record.',
+        'Returns a compact summary of each match, including a variant count where a ' +
+        'product has options; use get_product for the full record.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -280,8 +286,13 @@ ${THEME_CSS}
       return text({ error: `id must be ${MAX_ID} characters or fewer`, received: raw.length }, true);
     }
     const needle = raw.toLowerCase();
+    const matches = (value) => String(value).toLowerCase() === needle;
     const found = this.#products.find((p) =>
-      [p.sku, p.mpn, p.gtin].filter(Boolean).some((v) => String(v).toLowerCase() === needle));
+      [p.sku, p.mpn, p.gtin].filter(Boolean).some(matches)
+      // A variant SKU resolves to its group: that is the identifier printed on
+      // the box, and an agent given one should not get "no product matches".
+      || (p.variants?.skus ?? []).some(matches)
+      || (p.variants?.gtins ?? []).some(matches));
     if (!found) {
       return text({ error: `no product matches "${id}"`, known: this.#products.length }, true);
     }

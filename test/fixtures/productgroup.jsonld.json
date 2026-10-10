@@ -1,0 +1,27 @@
+{
+  "@context": "https://schema.org/",
+  "@type": "ProductGroup",
+  "@id": "#mens-tree-runner",
+  "productGroupID": "MENS_TREE_RUNNER",
+  "name": "Men's Tree Runner",
+  "brand": { "@type": "Brand", "name": "Allbirds" },
+  "description": "A breathable, lightweight sneaker.",
+  "image": "https://example.com/tree-runner.png",
+  "sku": "TR-MENS",
+  "offers": {
+    "@type": "Offer", "price": "100.00", "priceCurrency": "USD",
+    "availability": "https://schema.org/InStock"
+  },
+  "variesBy": ["https://schema.org/size", "https://schema.org/color"],
+  "hasVariant": [
+    { "@type": "Product", "url": "https://example.com/p/1" },
+    { "@type": "Product", "url": "https://example.com/p/2",
+      "sku": "TR-M-10-BLK",
+      "offers": { "@type": "Offer", "price": "100.00", "priceCurrency": "USD",
+                  "availability": "https://schema.org/InStock" } },
+    { "@type": "Product", "url": "https://example.com/p/3",
+      "sku": "TR-M-11-BLK",
+      "offers": { "@type": "Offer", "price": "110.00", "priceCurrency": "USD",
+                  "availability": "https://schema.org/OutOfStock" } }
+  ]
+}

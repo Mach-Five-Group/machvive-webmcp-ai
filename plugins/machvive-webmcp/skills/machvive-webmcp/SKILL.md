@@ -98,6 +98,12 @@ Three things worth telling someone:
 - **Results are capped** at 50 (default 10) with a `truncated` flag, because tool
   results land in the agent's context window. Large catalogues page with `offset`.
 
+**Variants are handled, and this matters on Shopify.** A product with options
+is a `ProductGroup` whose variants carry only what differs. The group is treated
+as the product and the variants summarised — `"variants": 49, "variesBy":
+["size","color"]` — so a storefront yields one useful row per product rather
+than dozens of nameless ones. `get_product` resolves a variant SKU to its group.
+
 The normalizer has its own entry point and **works in plain Node with no DOM**:
 
 ```javascript

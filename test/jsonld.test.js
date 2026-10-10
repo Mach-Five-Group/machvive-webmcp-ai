@@ -68,6 +68,97 @@ describe('collectProducts: container shapes', () => {
   });
 });
 
+describe('ProductGroup and variants', () => {
+  const GROUP = JSON.parse(readFileSync(
+    fileURLToPath(new URL('./fixtures/productgroup.jsonld.json', import.meta.url)), 'utf8'));
+
+  test('a group folds to one product, not one row per variant', () => {
+    // The defect this exists to prevent: a real Shopify page produced 50
+    // nameless rows, because the variants are `{ "@type": "Product", url }`
+    // and everything describing the product lives on the group.
+    const found = collectProducts(GROUP);
+    assert.equal(found.length, 1);
+    assert.equal(found[0].name, "Men's Tree Runner");
+    assert.equal(found[0].brand, 'Allbirds');
+    assert.equal(found[0].sku, 'TR-MENS');
+  });
+
+  test('the variants are summarised rather than enumerated', () => {
+    const [p] = collectProducts(GROUP);
+    assert.equal(p.variants.count, 3);
+    assert.deepEqual(p.variants.variesBy, ['size', 'color'], 'schema.org URLs reduced to tokens');
+    assert.equal(p.variants.inStock, 2);
+    assert.deepEqual(p.variants.skus, ['TR-M-10-BLK', 'TR-M-11-BLK']);
+  });
+
+  test('a group with no price of its own takes the lowest variant price', () => {
+    const priceless = structuredClone(GROUP);
+    delete priceless.offers;
+    const [p] = collectProducts(priceless);
+    assert.equal(p.price, 100, 'from the cheapest variant');
+    assert.deepEqual(p.priceRange, { low: 100, high: 110, count: 3 });
+  });
+
+  test('in stock if any variant is', () => {
+    // "Out of stock" because one size has gone would be wrong, and it is the
+    // answer an agent acts on.
+    const group = structuredClone(GROUP);
+    delete group.offers;
+    assert.equal(collectProducts(group)[0].availability, 'InStock');
+
+    const sold = structuredClone(group);
+    for (const v of sold.hasVariant) {
+      if (v.offers) v.offers.availability = 'https://schema.org/OutOfStock';
+    }
+    assert.equal(collectProducts(sold)[0].availability, 'OutOfStock');
+  });
+
+  test('variants inherit what they do not state', () => {
+    const group = structuredClone(GROUP);
+    delete group.offers;
+    const [p] = collectProducts(group);
+    // The bare first variant carries only a url; without inheritance it would
+    // contribute nothing and drag the summary down with it.
+    assert.equal(p.variants.count, 3);
+    assert.equal(p.name, "Men's Tree Runner");
+  });
+
+  test('a group with no variants behaves like an ordinary product', () => {
+    const solo = structuredClone(GROUP);
+    delete solo.hasVariant;
+    delete solo.variesBy;
+    const [p] = collectProducts(solo);
+    assert.equal(p.price, 100);
+    assert.equal(p.variants, undefined, 'no variant summary where there are no variants');
+  });
+
+  test('a stub naming the same product does not become a second row', () => {
+    // aggregateRating.itemReviewed is the common source: the product again,
+    // with nothing but a name. It keys differently from the rich record and
+    // survived dedupe as a ghost.
+    const page = [GROUP, {
+      '@type': 'AggregateRating', ratingValue: '4.8', reviewCount: '17',
+      itemReviewed: { '@type': 'Product', name: "Men's Tree Runner" }
+    }];
+    const found = collectProducts(page);
+    assert.equal(found.length, 1);
+    assert.equal(found[0].sku, 'TR-MENS', 'the rich record is the one kept');
+  });
+
+  test('a differently-named stub is still its own product', () => {
+    const page = [GROUP, { '@type': 'Product', name: 'Something Else Entirely' }];
+    assert.equal(collectProducts(page).length, 2, 'name dedupe must not swallow real products');
+  });
+
+  test('a loose variant pointing back at a group is not a product', () => {
+    const page = [GROUP, {
+      '@type': 'Product', url: 'https://example.com/p/9',
+      isVariantOf: { '@id': '#mens-tree-runner' }
+    }];
+    assert.equal(collectProducts(page).length, 1);
+  });
+});
+
 describe('normalizeProduct: field shapes', () => {
   test('brand as a string or a Brand node', () => {
     assert.equal(normalizeProduct(product({ brand: 'Belimo' })).brand, 'Belimo');

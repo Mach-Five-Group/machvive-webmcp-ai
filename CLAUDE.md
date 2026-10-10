@@ -106,6 +106,12 @@ Neither component may auto-emit to `window.dataLayer`; that is opt-in via the `d
 - Any `gtin` flavour collapsed into one field; dedupe by sku → gtin → url → name, **keeping the richer record** when the same product appears in both an ItemList and a BreadcrumbList.
 - A malformed JSON-LD block must be skipped, not fatal. Pages carry generated blocks beside a hand-written one, and the hand-written one has the trailing comma.
 
+**`ProductGroup` is the shape that matters most.** Shopify emits it for anything with options, so it is probably the most common Product JSON-LD on the web. A real storefront produced **50 nameless rows** before this was handled: the variants are `{ "@type": "Product", "url": … }` and every describing property lives on the group. Rules:
+- The group **is** the product. Fold it: variants inherit `name`/`brand`/`description`/`image`/`category`/`url`/`offers` where they state none, and are summarised as `{ count, variesBy, inStock, skus, gtins }` rather than emitted as rows.
+- **Never descend into `hasVariant`** during the walk, or they come back as separate products — the original bug.
+- `isVariantOf` is checked **before** collecting, not after. A node carrying both `@type: Product` and `isVariantOf` would otherwise be collected before the guard fires.
+- Dedupe has a **second pass by name**, because `aggregateRating.itemReviewed: { "@type": "Product", "name": … }` describes the same product with no identifier, keys differently from the rich record, and survived as a ghost row beside it.
+
 Behaviours to preserve in the component:
 - **Read-only.** No tool it registers may mutate anything; a test fails on a registered name containing add/buy/order/cart/checkout/update/delete/set. That is what makes auto-publishing safe and why it holds no credentials.
 - **Filter enums are derived from the page's own data**, and must be rebuilt by `load()`. Stale enums offer choices that match nothing. An empty facet emits *no* enum rather than `enum: []`, which would render a select with nothing in it.

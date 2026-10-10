@@ -21,6 +21,18 @@ export interface NormalizedProduct {
   priceRange?: { low: number | null; high: number | null; count: number | null };
   rating?: number | null;
   reviewCount?: number | null;
+  /**
+   * Present only when the source was a ProductGroup with variants. The group
+   * is the product; its variants are summarised rather than enumerated.
+   */
+  variants?: {
+    count: number;
+    /** Bare tokens, e.g. `['size', 'color']`. */
+    variesBy: string[];
+    inStock: number;
+    skus: string[];
+    gtins: string[];
+  };
   /** The untouched JSON-LD node. */
   raw: Record<string, unknown>;
 }

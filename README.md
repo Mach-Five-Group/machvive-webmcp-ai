@@ -398,6 +398,26 @@ decorated strings, and `availability` arriving as `https://schema.org/InStock`
 rather than a word. A malformed block is skipped rather than taking the page's
 other blocks down with it.
 
+### Variants
+
+Shopify and most storefronts describe a product with options as a
+`ProductGroup` carrying `hasVariant`, where the variants hold only what differs
+— often just a URL. Everything describing the product lives on the group.
+
+The group is treated as the product and its variants are summarised:
+
+```json
+{ "name": "Men's Tree Runner", "sku": "TR-MENS", "price": 100,
+  "availability": "InStock", "variants": 49, "variesBy": ["size", "color"] }
+```
+
+That is one useful row instead of 49 nameless ones, and a fraction of the
+context. `get_product` resolves a *variant* SKU to its group, because the
+identifier on the box is the variant's. A group with no price of its own takes
+the lowest variant price and reports the range; it counts as in stock if any
+variant is, since "out of stock" because one size has gone is the wrong answer
+for an agent to act on.
+
 One tool set per page however many elements you place; the first owns it and hands
 over if removed. Results are capped at 50 with a default of 10 and a `truncated`
 flag, because a tool result lands in an agent's context window.

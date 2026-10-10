@@ -219,6 +219,49 @@ describe('search_products', () => {
   });
 });
 
+describe('variant products through the tools', () => {
+  beforeEach(() => document.body.replaceChildren());
+
+  const GROUP = readFileSync(
+    fileURLToPath(new URL('./fixtures/productgroup.jsonld.json', import.meta.url)), 'utf8');
+
+  test('search returns one row carrying the variant summary', async () => {
+    withJsonLd(GROUP);
+    await mount();
+    const { data } = await call(PRODUCT_TOOLS.SEARCH, {});
+    assert.equal(data.total, 1, 'one product, not one row per variant');
+    const [row] = data.products;
+    assert.equal(row.name, "Men's Tree Runner");
+    assert.equal(row.variants, 3);
+    assert.deepEqual(row.variesBy, ['size', 'color']);
+  });
+
+  test('a product with no variants carries no variant keys', async () => {
+    withJsonLd();   // the flat HVAC fixture
+    await mount();
+    const { data } = await call(PRODUCT_TOOLS.SEARCH, { query: 'BASRT-B' });
+    assert.equal(data.products[0].variants, undefined, 'no noise where there is nothing to say');
+  });
+
+  test('get_product resolves a variant SKU to its group', async () => {
+    // The SKU on the box is the variant's, not the group's. Answering "no
+    // product matches" for an identifier the page publishes is a bad miss.
+    withJsonLd(GROUP);
+    await mount();
+    const { raw, data } = await call(PRODUCT_TOOLS.GET, { id: 'TR-M-11-BLK' });
+    assert.ok(!raw.isError, JSON.stringify(data));
+    assert.equal(data.sku, 'TR-MENS');
+    assert.equal(data.variants.count, 3);
+  });
+
+  test('an unknown SKU is still a miss', async () => {
+    withJsonLd(GROUP);
+    await mount();
+    const { raw } = await call(PRODUCT_TOOLS.GET, { id: 'TR-M-99-PINK' });
+    assert.equal(raw.isError, true, 'variant matching must not match everything');
+  });
+});
+
 describe('get_product', () => {
   beforeEach(() => document.body.replaceChildren());
 
