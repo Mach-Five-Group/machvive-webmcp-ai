@@ -123,6 +123,16 @@ Behaviours to preserve in the component:
 
 Two tests in this area were originally passing for the wrong reason and are worth not re-breaking: the `limit` clamp needs a catalogue larger than `MAX_LIMIT` to be observable at all, and the unpriced-product test must reload the *owning* element — mounting a second one leaves the first in charge of the tools, so the call answers from stale data.
 
+## The magnet component's tool tiers and namespace
+
+`magnet_start` is the only one of the four with a visible side effect — it opens and prefills a widget on someone's screen. The `tools` attribute (`all` | `read` | `none`) gates it, falling back to the magnet's own `mag_agent_tools`, so a merchant setting travels with the magnet rather than the markup. **Default stays `all`**: narrowing it would silently remove `magnet_start` from pages already publishing it, machvive.com included.
+
+`magnet_*` is a page-wide namespace and ownership is module-scoped, like the lorem and products components. The case that forced it: the Magnet runtime is expected to mount one of these on hundreds of customer sites, and any site that also carries its own tag would get two registrations, the second silently replacing the first — possibly describing a different magnet. The claim checks ownership **and** liveness, because after `provideContext` the owner still points at a connected element while the registry holds nothing.
+
+Two tests here exist because the mutations survived without them: narrowing the tier must actually *withdraw* `magnet_start` rather than leave it from the previous tier, and a later element must claim when `provideContext` emptied the registry. Neither is visible from the happy path.
+
+`observedAttributes` listed four attributes with no `attributeChangedCallback` at all until `tools` needed one. Only `tools` is handled; the others are read at boot, and making them re-boot now would be a behaviour change nobody asked for.
+
 ## Theming
 
 [shared/theme.js](src/wc/shared/theme.js) holds the only copy of the palette; both UI components interpolate `THEME_CSS` at the top of their stylesheet. Rules to keep:

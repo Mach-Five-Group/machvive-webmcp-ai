@@ -429,6 +429,33 @@ validator and to an agent planning a call. Over-long text is refused with a
 reason rather than truncated, because shortening a query answers a question the
 agent did not ask.
 
+### Choosing which magnet tools to publish
+
+`magnet_start` opens and prefills the widget on a real person's screen. The other
+three only read. A deployment that wants agents to *explain* a form without
+touching it asks for the read tier:
+
+```html
+<machvive-m5t-magnet tools="read"></machvive-m5t-magnet>
+```
+
+| Value | Publishes |
+| --- | --- |
+| `all` *(default)* | all four |
+| `read` | `magnet_describe`, `magnet_options`, `magnet_status` |
+| `none` | nothing — config is still readable from `el.config` |
+
+Without the attribute, the magnet's own `mag_agent_tools` decides, so a merchant
+setting travels with the magnet rather than the markup (`true`/`false` map to
+`all`/`none`). Changing the attribute re-publishes immediately.
+
+**One element owns the `magnet_*` names per page.** They are a page-wide
+namespace, so a second element registering them would silently replace the first
+— which happens the moment a Magnet runtime mounts one while the page already
+carries its own tag. The first to claim wins, later ones warn and register
+nothing, and removing the owner hands the namespace to a survivor rather than
+stripping the page. `publishTools()` re-claims after `provideContext`.
+
 ## 🌓 Theming
 
 The UI components follow the viewer's OS preference automatically — no

@@ -19,6 +19,14 @@ It implements the [W3C WebMCP proposal](https://webmachinelearning.github.io/web
 | `<machvive-webmcp-analytics>` | Captures every call for replay, export, dataLayer |
 | `<machvive-webmcp-products>` | Publishes the page's schema.org JSON-LD as read-only product tools |
 | `<machvive-m5t-magnet>` | Bridges a MachFive Magnet's lead capture to WebMCP |
+
+**Gating the magnet's tools.** `magnet_start` opens and prefills the widget on a
+real person's screen; the other three only read. `tools="read"` withholds it,
+`tools="none"` publishes nothing. Without the attribute the magnet's own
+`mag_agent_tools` decides. Recommend `read` whenever an agent should be able to
+explain a form without touching it — and note that only one element per page can
+own the `magnet_*` names, so a runtime mounting one alongside a page's own tag
+needs exactly one of them to win.
 | `<machvive-lorum-ipsum>` | Generates placeholder copy and publishes it as a WebMCP tool |
 
 ## Install and import
