@@ -263,3 +263,176 @@ describe('scheduling declared as an action, not a step', () => {
     assert.equal(opened.length, 1, 'should still find the instance and open it');
   });
 });
+
+describe('tool tiers', () => {
+  const names = () => navigator.modelContext.tools.map((t) => t.name).filter((n) => n.startsWith('magnet_')).sort();
+
+  const mountWith = async (attrs = {}, extra = {}) => {
+    installRuntime([SELECT, EMAIL], extra);
+    const el = document.createElement('machvive-m5t-magnet');
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+    document.body.append(el);
+    for (let i = 0; i < 40 && !navigator.modelContext.tools.some((t) => t.name.startsWith('magnet_')); i++) {
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    return el;
+  };
+
+  test('all four by default, so existing pages are unchanged', async () => {
+    const el = await mountWith();
+    assert.deepEqual(names(), ['magnet_describe', 'magnet_options', 'magnet_start', 'magnet_status']);
+    el.remove();
+  });
+
+  test('tools="read" withholds the one tool with a side effect', async () => {
+    // magnet_start opens and prefills a widget on a real person's screen. The
+    // other three only read, which is why they can be on by default.
+    const el = await mountWith({ tools: 'read' });
+    assert.deepEqual(names(), ['magnet_describe', 'magnet_options', 'magnet_status']);
+    assert.equal(el.tools, 'read');
+    el.remove();
+  });
+
+  test('tools="none" publishes nothing but still reads config', async () => {
+    installRuntime([SELECT, EMAIL]);
+    const el = document.createElement('machvive-m5t-magnet');
+    el.setAttribute('tools', 'none');
+    document.body.append(el);
+    await new Promise((r) => setTimeout(r, 300));
+    assert.deepEqual(names(), []);
+    assert.ok(el.config, 'config is still available to page code');
+    el.remove();
+  });
+
+  test('the magnet config decides when the attribute is absent', async () => {
+    // So a merchant setting travels with the magnet rather than the markup.
+    const el = await mountWith({}, { mag_agent_tools: 'read' });
+    assert.deepEqual(names(), ['magnet_describe', 'magnet_options', 'magnet_status']);
+    el.remove();
+
+    const off = await mountWith({}, { mag_agent_tools: false });
+    await new Promise((r) => setTimeout(r, 200));
+    assert.deepEqual(names(), [], 'false maps to none');
+    off.remove();
+  });
+
+  test('the attribute overrides the config', async () => {
+    const el = await mountWith({ tools: 'all' }, { mag_agent_tools: false });
+    assert.ok(names().includes('magnet_start'), 'the page can override the magnet setting');
+    el.remove();
+  });
+
+  test('an unknown tools value falls back to all rather than publishing nothing', async () => {
+    const el = await mountWith({ tools: 'banana' });
+    assert.ok(names().includes('magnet_start'));
+    el.remove();
+  });
+});
+
+describe('namespace ownership', () => {
+  const names = () => navigator.modelContext.tools.map((t) => t.name).filter((n) => n.startsWith('magnet_'));
+
+  test('a second element does not re-register over the first', async () => {
+    // Tool names are page-wide. The runtime mounting one while a page already
+    // carries its own tag is the case that makes this real.
+    installRuntime([SELECT, EMAIL]);
+    const first = document.createElement('machvive-m5t-magnet');
+    document.body.append(first);
+    for (let i = 0; i < 40 && !names().length; i++) await new Promise((r) => setTimeout(r, 25));
+    const before = names().length;
+
+    const second = document.createElement('machvive-m5t-magnet');
+    document.body.append(second);
+    await new Promise((r) => setTimeout(r, 300));
+
+    assert.equal(names().length, before, 'no duplicate registration');
+    assert.deepEqual(second.toolNames ?? [], [], 'the second element registered nothing');
+    first.remove(); second.remove();
+  });
+
+  test('removing the owner hands the namespace to a survivor', async () => {
+    installRuntime([SELECT, EMAIL]);
+    const first = document.createElement('machvive-m5t-magnet');
+    const second = document.createElement('machvive-m5t-magnet');
+    document.body.append(first);
+    for (let i = 0; i < 40 && !names().length; i++) await new Promise((r) => setTimeout(r, 25));
+    document.body.append(second);
+    await new Promise((r) => setTimeout(r, 200));
+
+    first.remove();
+    await new Promise((r) => setTimeout(r, 200));
+    assert.ok(names().length > 0, 'removing one element must not strip the page of magnet tools');
+    second.remove();
+  });
+
+  test('removing the only element withdraws the tools', async () => {
+    installRuntime([SELECT, EMAIL]);
+    const el = document.createElement('machvive-m5t-magnet');
+    document.body.append(el);
+    for (let i = 0; i < 40 && !names().length; i++) await new Promise((r) => setTimeout(r, 25));
+    el.remove();
+    await new Promise((r) => setTimeout(r, 100));
+    assert.deepEqual(names(), [], 'a tool that cannot run must not stay advertised');
+  });
+
+  test('publishTools re-registers after provideContext wipes the toolset', async () => {
+    installRuntime([SELECT, EMAIL]);
+    const el = document.createElement('machvive-m5t-magnet');
+    document.body.append(el);
+    for (let i = 0; i < 40 && !names().length; i++) await new Promise((r) => setTimeout(r, 25));
+
+    navigator.modelContext.provideContext({ tools: [] });
+    assert.deepEqual(names(), [], 'wiped, as provideContext promises');
+
+    el.publishTools();
+    assert.ok(names().length > 0, 'the page can ask for them back');
+    el.remove();
+  });
+});
+
+describe('tier changes and liveness', () => {
+  const names = () => navigator.modelContext.tools.map((t) => t.name).filter((n) => n.startsWith('magnet_'));
+
+  const mountOne = async (attrs = {}) => {
+    const el = document.createElement('machvive-m5t-magnet');
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+    document.body.append(el);
+    for (let i = 0; i < 40 && !names().length; i++) await new Promise((r) => setTimeout(r, 25));
+    return el;
+  };
+
+  test('narrowing the tier withdraws the tool it no longer covers', async () => {
+    // A merchant turning actions off must actually remove magnet_start, not
+    // leave it registered from the previous tier.
+    installRuntime([SELECT, EMAIL]);
+    const el = await mountOne();
+    assert.ok(names().includes('magnet_start'));
+
+    el.setAttribute('tools', 'read');
+    await new Promise((r) => setTimeout(r, 50));
+    assert.ok(!names().includes('magnet_start'), 'the act tool must go');
+    assert.ok(names().includes('magnet_describe'), 'the read tools stay');
+
+    el.setAttribute('tools', 'all');
+    await new Promise((r) => setTimeout(r, 50));
+    assert.ok(names().includes('magnet_start'), 'and come back');
+    el.remove();
+  });
+
+  test('a later element claims the namespace when provideContext emptied it', async () => {
+    // Ownership alone is not enough: after a wipe the owner still points at a
+    // connected element while the registry holds nothing, and a page would be
+    // left advertising no magnet tools for the rest of its life.
+    installRuntime([SELECT, EMAIL]);
+    const first = await mountOne();
+    assert.ok(names().length);
+
+    navigator.modelContext.provideContext({ tools: [] });
+    assert.deepEqual(names(), []);
+    assert.equal(first.isConnected, true, 'the stale owner is still on the page');
+
+    const second = await mountOne();
+    assert.ok(names().length > 0, 'a newly mounted element should republish');
+    first.remove(); second.remove();
+  });
+});

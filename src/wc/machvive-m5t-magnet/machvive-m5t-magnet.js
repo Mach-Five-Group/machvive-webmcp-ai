@@ -143,6 +143,25 @@ function prefillSchema(magnet) {
   return { type: 'object', properties };
 }
 
+/**
+ * Which element owns the magnet_* names.
+ *
+ * Tool names are a page-wide namespace, so two elements both registering
+ * `magnet_describe` means the second silently replaces the first — and they can
+ * be describing different magnets. The Magnet runtime mounting one of these
+ * while a page already carries its own tag is the case that makes this real.
+ */
+let owner = null;
+
+/**
+ * `magnet_start` opens and prefills a widget on a real person's screen. The
+ * other three only read. A deployment that wants agents to explain a form
+ * without touching it asks for `read`.
+ */
+const READ_TOOLS = ['magnet_describe', 'magnet_options', 'magnet_status'];
+const ACT_TOOLS = ['magnet_start'];
+const TIERS = { all: [...READ_TOOLS, ...ACT_TOOLS], read: READ_TOOLS, none: [] };
+
 export class MachviveM5tMagnet extends HTMLElement {
   #api = null;
   #magnet = null;
@@ -152,7 +171,7 @@ export class MachviveM5tMagnet extends HTMLElement {
   #registered = [];
 
   static get observedAttributes() {
-    return ['app-guid', 'src', 'magnet-id'];
+    return ['app-guid', 'src', 'magnet-id', 'tools'];
   }
 
   constructor() {
@@ -167,9 +186,60 @@ export class MachviveM5tMagnet extends HTMLElement {
     await this.#boot();
   }
 
+  attributeChangedCallback(name, before, after) {
+    // Only `tools`. The others are read during boot and changing them after
+    // the fact has never re-booted the element; making it do so now would be a
+    // behaviour change nobody asked for.
+    if (name !== 'tools' || before === after || !this.#magnet) return;
+    this.publishTools();
+  }
+
   disconnectedCallback() {
     for (const name of this.#registered) globalThis.navigator?.modelContext?.unregisterTool(name);
     this.#registered = [];
+    // Release the namespace so a surviving element can take it, rather than
+    // leaving the page with no magnet tools because the owner went away.
+    if (owner === this) {
+      owner = null;
+      for (const other of globalThis.document?.querySelectorAll?.('machvive-m5t-magnet') ?? []) {
+        if (other !== this && other.isConnected && other instanceof MachviveM5tMagnet) {
+          other.publishTools();
+          break;
+        }
+      }
+    }
+  }
+
+  /**
+   * Which tools to publish: `all` (default), `read`, or `none`.
+   *
+   * The attribute wins; otherwise the magnet's own `mag_agent_tools` decides,
+   * so a merchant setting travels with the magnet rather than the markup.
+   * `true`/`false` there map to `all`/`none`.
+   */
+  get tools() {
+    const attr = this.getAttribute('tools');
+    if (attr && attr in TIERS) return attr;
+    const configured = this.#magnet?.mag_agent_tools;
+    if (configured === true) return 'all';
+    if (configured === false) return 'none';
+    if (typeof configured === 'string' && configured in TIERS) return configured;
+    return 'all';
+  }
+
+  /**
+   * (Re)publishes this element's tools, taking the namespace if it is free.
+   *
+   * Needed because `provideContext` replaces the whole toolset by design, and
+   * because an owner being removed should hand the namespace on rather than
+   * leave the page with no magnet tools.
+   */
+  publishTools() {
+    if (!this.#magnet) return this;          // not booted yet; #boot will publish
+    for (const name of this.#registered) globalThis.navigator?.modelContext?.unregisterTool(name);
+    this.#registered = [];
+    this.#registerTools();
+    return this;
   }
 
   /** The magnet's own config, for page code that wants it. */
@@ -280,11 +350,35 @@ export class MachviveM5tMagnet extends HTMLElement {
   }
 
   #register(tool) {
+    if (!TIERS[this.tools].includes(tool.name)) return;
     globalThis.navigator?.modelContext?.registerTool(tool);
     this.#registered.push(tool.name);
   }
 
+  /**
+   * Claims the magnet_* namespace, or declines.
+   *
+   * Ownership *and* liveness: after `provideContext` the owner still points
+   * here while the registry holds nothing, and checking ownership alone would
+   * leave the page advertising no magnet tools at all.
+   */
+  #claim() {
+    if (owner === this) return true;
+    const live = globalThis.navigator?.modelContext?.tools
+      ?.some((t) => t.name.startsWith('magnet_'));
+    if (owner && owner.isConnected && live) {
+      console.warn(
+        'machvive-m5t-magnet: another element already publishes the magnet_* tools on this page; ' +
+        'this one will read config but register nothing.'
+      );
+      return false;
+    }
+    owner = this;
+    return true;
+  }
+
   #registerTools() {
+    if (!this.#claim()) return;
     const magnet = this.#magnet;
     const steps = collectingSteps(magnet);
     const schema = prefillSchema(magnet);
