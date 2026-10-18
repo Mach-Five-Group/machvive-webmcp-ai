@@ -312,10 +312,18 @@ register and the lead would look booked without being booked. Step types this
 package doesn't recognise degrade the same way — described, not guessed at.
 
 Keys beyond the declared fields are passed through rather than rejected — that's
-how a campaign or source id reaches the lead record.
+how a campaign or source id reaches the lead record. Declared visitor-only fields
+(including scheduling fields) are excluded even if supplied as extra keys.
 
-On a magnet that opens with a welcome card and buttons, the widget clears answers
-when the visitor taps one, so prefill doesn't survive. `magnet_describe` says so.
+On older runtimes, choosing a welcome-card button clears prefill; `magnet_describe`
+warns about that. Runtimes advertising `capabilities.hubPrefill` retain suggested
+answers across that choice. Starts pass `source: "agent"` to the runtime; the
+runtime remains responsible for requiring visitor confirmation before capture.
+An explicit `false` from `open()` is reported as a failed start, not success.
+
+When mounted SDK instances expose their own `definition`, the component selects
+from those definitions, scoped by `app-guid` and `magnet-id` (ID or GUID). This
+avoids describing a different app after another embed overwrites global config.
 
 Invalid input comes back as data so the agent can correct itself:
 

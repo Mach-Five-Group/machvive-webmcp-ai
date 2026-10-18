@@ -195,7 +195,7 @@ export class MachviveM5tMagnet extends HTMLElement {
   }
 
   disconnectedCallback() {
-    for (const name of this.#registered) globalThis.navigator?.modelContext?.unregisterTool(name);
+    if (owner === this) for (const name of this.#registered) globalThis.navigator?.modelContext?.unregisterTool(name);
     this.#registered = [];
     // Release the namespace so a surviving element can take it, rather than
     // leaving the page with no magnet tools because the owner went away.
@@ -236,7 +236,7 @@ export class MachviveM5tMagnet extends HTMLElement {
    */
   publishTools() {
     if (!this.#magnet) return this;          // not booted yet; #boot will publish
-    for (const name of this.#registered) globalThis.navigator?.modelContext?.unregisterTool(name);
+    if (owner === this) for (const name of this.#registered) globalThis.navigator?.modelContext?.unregisterTool(name);
     this.#registered = [];
     this.#registerTools();
     return this;
@@ -269,19 +269,20 @@ export class MachviveM5tMagnet extends HTMLElement {
 
     this.#api = found.api;
     const wanted = this.getAttribute('magnet-id');
+    const appGuid = this.getAttribute('app-guid');
+    const candidates = found.api.instances.filter(i => !appGuid || !i.appGuid || i.appGuid === appGuid);
+    const definitions = candidates.some(i => i.definition)
+      ? candidates.filter(i => i.definition).map(i => i.definition) : found.config.magnets;
     this.#magnet = wanted
-      ? found.config.magnets.find((m) => m.mag_id === wanted)
-      : found.config.magnets.find((m) => m.mag_home) ?? found.config.magnets[0];
-
+      ? definitions.find(m => m.mag_guid === wanted || m.mag_id === wanted)
+      : definitions.find(m => m.mag_home) ?? definitions[0];
     if (!this.#magnet) {
       console.warn(`machvive-m5t-magnet: no magnet "${wanted}" in this app.`);
       return;
     }
-    // A magnet need not declare mag_id; the runtime then stores the instance id
-    // as null. Comparing undefined to null would silently miss, so normalise.
-    const wantId = this.#magnet.mag_id ?? null;
-    this.#instance =
-      this.#api.instances.find((i) => (i.id ?? null) === wantId) ?? this.#api.instances[0];
+    this.#instance = candidates.find(i => this.#magnet.mag_guid && i.guid === this.#magnet.mag_guid)
+      ?? candidates.find(i => (i.id ?? null) === (this.#magnet.mag_id ?? null));
+    if (!this.#instance) return;
 
     // Every instance on the page shares one global emitter, so filter by magnet.
     // Tracking the whole surface lets magnet_status say where the visitor got to,
@@ -364,8 +365,10 @@ export class MachviveM5tMagnet extends HTMLElement {
    */
   #claim() {
     if (owner === this) return true;
-    const live = globalThis.navigator?.modelContext?.tools
-      ?.some((t) => t.name.startsWith('magnet_'));
+    const tools = globalThis.navigator?.modelContext?.tools;
+    const live = Array.isArray(tools)
+      ? tools.some((t) => t.name.startsWith('magnet_'))
+      : !!owner?.#registered.length;
     if (owner && owner.isConnected && live) {
       console.warn(
         'machvive-m5t-magnet: another element already publishes the magnet_* tools on this page; ' +
@@ -438,7 +441,7 @@ export class MachviveM5tMagnet extends HTMLElement {
           if (a?.type === 'call' && a.value) lines.push(`Phone: ${a.value}`);
           if (a?.type === 'email' && a.value) lines.push(`Email: ${a.value}`);
         }
-        if (hub) {
+        if (hub && !this.#instance?.capabilities?.hubPrefill) {
           lines.push('', 'This magnet opens on a welcome card with buttons. Answers are cleared when ' +
             'the visitor taps one, so anything you prefill will not survive — describe what you know ' +
             'to the visitor instead of relying on magnet_start to carry it.');
@@ -490,7 +493,6 @@ export class MachviveM5tMagnet extends HTMLElement {
         // ride the capture and land on the lead record, which is how machine
         // identity (lead_source, campaign ids) reaches the CRM. Stripping them
         // here would quietly break that.
-        const extra = Object.keys(params).filter((k) => !fields.includes(k));
         for (const s of steps.filter(isPrefillable)) {
           const v = params[s.step_columns[0]];
           const opts = (s.step_options ?? []).map((o) => o.label);
@@ -505,12 +507,22 @@ export class MachviveM5tMagnet extends HTMLElement {
           }
         }
 
+        // Unsupported declared fields are visitor-only, even when passed as
+        // extra keys. Include every column and the built-in booking route key.
+        const visitorOnlyFields = new Set(allSteps(magnet).filter(s => !isPrefillable(s)).flatMap(s => s.step_columns ?? []));
+        for (const action of magnet.mag_actions ?? []) {
+          if (action.type === 'book') visitorOnlyFields.add(action.config?.column || 'preferred_time');
+        }
         const prefill = Object.fromEntries(
-          Object.entries(params).filter(([, v]) => v != null && v !== '').map(([k, v]) => [k, String(v)])
+          Object.entries(params).filter(([k, v]) => !visitorOnlyFields.has(k) &&
+            !['__proto__', 'constructor', 'prototype'].includes(k) && v != null && v !== '').map(([k, v]) => [k, String(v)])
         );
-        this.#instance.open({ prefill, reset: true });
+        if (this.#instance.open({ prefill, reset: true, source: 'agent' }) === false) {
+          return { content: [{ type: 'text', text: 'The magnet cannot start now. The visitor may have a request in progress.' }], isError: true };
+        }
 
         const filled = Object.keys(prefill);
+        const extra = filled.filter((k) => !fields.includes(k));
         const missing = fields.filter((f) => !filled.includes(f));
         const visitorOnly = steps.filter((s) => !isPrefillable(s)).map((s) => s.step_columns[0]);
         return (
@@ -518,7 +530,7 @@ export class MachviveM5tMagnet extends HTMLElement {
           (extra.length ? ` Passed through with the lead: ${extra.join(', ')}.` : '') +
           (missing.length ? ` They will be asked for: ${missing.join(', ')}.` : '') +
           (visitorOnly.length ? ` They complete in the widget: ${visitorOnly.join(', ')}.` : '') +
-          (isHub(magnet) ? ' Note: this magnet clears answers when the visitor taps a button, so the prefill may not survive.' : '') +
+          (isHub(magnet) && !this.#instance?.capabilities?.hubPrefill ? ' Note: this magnet clears answers when the visitor taps a button, so the prefill may not survive.' : '') +
           ' They must review and submit it themselves.'
         );
       }
