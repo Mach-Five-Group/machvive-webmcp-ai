@@ -338,6 +338,13 @@ Call `magnet_describe` before planning: it reports whether the magnet books on a
 real calendar, hands off to an external booking system, or merely records a
 preferred time — and whether prefill will survive on that magnet.
 
+Visitor-only fields are stripped even when supplied as extra keys. Newer SDKs
+advertise `capabilities.hubPrefill` when welcome-card navigation retains prefill;
+older runtimes still receive the warning. Starts carry `source: "agent"`, and
+an explicit `false` from the runtime is a failed start. The runtime must enforce
+visitor confirmation before submitting. Bind by `app-guid` and magnet ID/GUID
+when a page mounts magnets from multiple apps.
+
 ## Theming
 
 Components follow the OS colour preference. `theme="light"` or `theme="dark"`

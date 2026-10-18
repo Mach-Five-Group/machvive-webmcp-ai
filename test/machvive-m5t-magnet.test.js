@@ -436,3 +436,42 @@ describe('tier changes and liveness', () => {
     first.remove(); second.remove();
   });
 });
+
+describe('Magnet SDK integration contract', () => {
+  test('marks assistant opens and strips visitor-only fields even as extra keys', async () => {
+    installRuntime([EMAIL, SCHEDULER, EXOTIC], {mag_actions:[{type:'book',config:{column:'appointment'}}]});
+    await mount();
+    const result = await call('magnet_start', {email:'test@example.test', meeting_time:'tomorrow', mystery:'bypass', appointment:'noon', campaign:'summer'});
+    assert.deepEqual(opened, [{reset:true,source:'agent',prefill:{email:'test@example.test',campaign:'summer'}}]);
+    assert.doesNotMatch(text(result), /Passed through with the lead:[^.]*meeting_time/);
+  });
+  test('reports a pending submission instead of claiming it opened', async () => {
+    installRuntime([EMAIL]); window.MachFiveMagnet.instances[0].open=()=>false;
+    await mount(); const result=await call('magnet_start',{});
+    assert.equal(result.isError,true);assert.match(text(result), /cannot start now/);
+  });
+  test('uses the selected instance definition when another app overwrote global config', async () => {
+    const selected=installRuntime([EMAIL], {mag_guid:'first-guid',mag_title:'First store'});
+    const inst=window.MachFiveMagnet.instances[0]; Object.assign(inst,{definition:selected,guid:'first-guid',appGuid:'first-app',capabilities:{hubPrefill:true}});
+    window.MachFiveMagnet.instances.push({id:'test_magnet',appGuid:'other-app',guid:'other-guid',definition:{...selected,mag_guid:'other-guid',mag_title:'Other store'},open(){throw Error('wrong store');}});
+    window.machfivemagnet={appGuid:'other-app',magnets:[window.MachFiveMagnet.instances[1].definition]};
+    const el=document.createElement('machvive-m5t-magnet');el.setAttribute('app-guid','first-app');el.setAttribute('magnet-id','first-guid');
+    const ready=new Promise(resolve=>el.addEventListener('magnet-ready',resolve,{once:true}));document.body.append(el);await ready;
+    assert.match(text(await call('magnet_describe')), /First store/);await call('magnet_start',{email:'test@example.test'});assert.equal(opened.length,1);
+  });
+  test('does not replace a connected owner when the native registry has no tools list', async () => {
+    installRuntime([EMAIL]); const first=await mount();
+    const context=navigator.modelContext, descriptor=Object.getOwnPropertyDescriptor(navigator,'modelContext');
+    let registrations=0;
+    Object.defineProperty(navigator,'modelContext',{configurable:true,value:{registerTool(){registrations++;},unregisterTool(){}}});
+    try {
+      const el=document.createElement('machvive-m5t-magnet');
+      const ready=new Promise(resolve=>el.addEventListener('magnet-ready',resolve,{once:true}));document.body.append(el);await ready;
+      assert.equal(registrations,0);el.remove();
+    } finally {Object.defineProperty(navigator,'modelContext',descriptor || {configurable:true,value:context});first.remove();}
+  });
+  test('removing a stale owner does not withdraw its replacement tools', async () => {
+    installRuntime([EMAIL]);const first=await mount();navigator.modelContext.provideContext({tools:[]});const second=await mount();
+    first.remove();assert.ok(navigator.modelContext.tools.some(t=>t.name==='magnet_start'));second.remove();
+  });
+});
