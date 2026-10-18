@@ -1,16 +1,24 @@
 /**
- * Polyfill for the WebMCP `navigator.modelContext` API.
+ * Polyfill for the WebMCP `document.modelContext` API.
  *
- * Mirrors the W3C Web Machine Learning CG proposal: registerTool / unregisterTool
- * for incremental changes, provideContext to replace the whole toolset at once.
- * https://webmachinelearning.github.io/webmcp/docs/proposal.html
+ * Tracks the W3C spec at https://github.com/webmachinelearning/webmcp — not the
+ * older `navigator.modelContext` explainer, which is stale. Chrome 149 and Edge
+ * 150 ship the document-scoped API behind an origin trial, and Brave, ChatGPT
+ * Desktop and Meta's glasses implement it too.
  *
- * The polyfill is a registry only — it has no transport to an agent. Bridge code
- * (an extension, a devtools panel, a harness) listens for `machvive-webmcp-change`
- * on `window` and calls `navigator.modelContext.callTool(name, params)` to invoke.
+ * What this provides, matching the spec:
+ *   registerTool(tool, { signal })  -> Promise, rejects on a duplicate name
+ *   getTools()                      -> Promise<RegisteredTool[]>
+ *   executeTool(tool, input, opts)  -> Promise<DOMString>, a JSON string
+ *   ontoolchange / ontoolactivated / ontoolcancel
+ *
+ * Unregistration is by `AbortSignal`, which is why `unregisterTool` and
+ * `provideContext` are gone: the spec removed both, and keeping them meant the
+ * same call doing different things depending on whether the browser was native.
  */
 
-export const TOOLS_CHANGED_EVENT = 'machvive-webmcp-change';
+/** The spec's event name. `machvive-webmcp-change` was ours and is retired. */
+export const TOOL_CHANGE_EVENT = 'toolchange';
 
 function assertToolDescriptor(tool) {
   if (!tool || typeof tool !== 'object') {
@@ -19,153 +27,159 @@ function assertToolDescriptor(tool) {
   if (typeof tool.name !== 'string' || tool.name.length === 0) {
     throw new TypeError('WebMCP: tool.name must be a non-empty string');
   }
+  // `description` is required by the spec, and it is the only documentation an
+  // agent has when choosing between tools — a missing one is a silent failure
+  // to be chosen, not an error anyone would see.
+  if (typeof tool.description !== 'string' || tool.description.length === 0) {
+    throw new TypeError(`WebMCP: tool "${tool.name}" must supply a description`);
+  }
   if (typeof tool.execute !== 'function') {
     throw new TypeError(`WebMCP: tool "${tool.name}" must supply an execute() function`);
   }
 }
 
-// Handlers may return a bare string for convenience; the wire shape is always
-// an MCP content array.
-function normalizeResult(value) {
-  if (value && Array.isArray(value.content)) return value;
-  if (typeof value === 'string') return { content: [{ type: 'text', text: value }] };
-  if (value === undefined || value === null) return { content: [] };
-  return { content: [{ type: 'text', text: JSON.stringify(value) }] };
+/** The shape `getTools()` exposes: descriptors, never handlers. */
+function toRegistered(tool) {
+  return {
+    name: tool.name,
+    title: tool.title,
+    description: tool.description,
+    inputSchema: tool.inputSchema,
+    annotations: tool.annotations,
+    window: globalThis.window,
+    // globalThis.location is absent when jsdom globals are installed piecemeal.
+    origin: globalThis.location?.origin ?? globalThis.window?.location?.origin ?? ''
+  };
 }
 
-class ModelContextPolyfill {
+class ModelContextPolyfill extends EventTarget {
   #tools = new Map();
 
-  /** Adds one tool, leaving the rest of the registry intact. */
-  registerTool(tool) {
-    assertToolDescriptor(tool);
-    this.#tools.set(tool.name, tool);
-    this.#notify();
-  }
-
-  /** Removes one tool by name. Returns whether it was present. */
-  unregisterTool(name) {
-    const removed = this.#tools.delete(name);
-    if (removed) this.#notify();
-    return removed;
-  }
-
-  /** Replaces the entire toolset — use when app state changes what is available. */
-  provideContext({ tools = [] } = {}) {
-    tools.forEach(assertToolDescriptor);
-    this.#tools.clear();
-    for (const tool of tools) this.#tools.set(tool.name, tool);
-    this.#notify();
-  }
-
-  /** Non-standard: the descriptors an agent would discover, minus the handlers. */
-  get tools() {
-    return [...this.#tools.values()].map(({ name, description, inputSchema }) => ({
-      name,
-      description,
-      inputSchema
-    }));
-  }
-
-  /** Non-standard: the invocation path a bridge uses to run a registered tool. */
-  async callTool(name, params = {}) {
-    const tool = this.#tools.get(name);
-    if (!tool) {
-      return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
-    }
+  /**
+   * @param {object} tool
+   * @param {{signal?: AbortSignal}} [options] Aborting the signal unregisters it.
+   * @returns {Promise<undefined>}
+   */
+  registerTool(tool, options = {}) {
     try {
-      return normalizeResult(await tool.execute(params, this.#agent()));
-    } catch (err) {
-      return { content: [{ type: 'text', text: String(err?.message ?? err) }], isError: true };
-    }
-  }
-
-  // The `agent` argument handed to execute(). Without a real agent channel the
-  // callback simply runs in the page, which is the correct degraded behavior.
-  #agent() {
-    return { requestUserInteraction: (callback) => Promise.resolve().then(callback) };
-  }
-
-  #notify() {
-    window.dispatchEvent(new CustomEvent(TOOLS_CHANGED_EVENT, { detail: { tools: this.tools } }));
-  }
-}
-
-// Current Chrome exposes document.modelContext and unregisters through abort
-// signals. Keep the legacy component-facing API while registering in the real
-// browser registry. This adapter deliberately has no polyfill tools/callTool API.
-class DocumentModelContextAdapter {
-  #context;
-  #registrations = new Map();
-  constructor(context) { this.#context = context; }
-  registerTool(tool) {
-    assertToolDescriptor(tool);
-    this.unregisterTool(tool.name);
-    const controller = new AbortController();
-    this.#registrations.set(tool.name, controller);
-    try {
-      const pending = this.#context.registerTool(tool, { signal: controller.signal });
-      Promise.resolve(pending).catch(error => {
-        if (this.#registrations.get(tool.name) === controller) this.#registrations.delete(tool.name);
-        if (!controller.signal.aborted) console.warn(`WebMCP: native registration failed for ${tool.name}`, error);
-      });
-      return pending;
+      assertToolDescriptor(tool);
     } catch (error) {
-      this.#registrations.delete(tool.name);
-      controller.abort();
+      return Promise.reject(error);
+    }
+    if (this.#tools.has(tool.name)) {
+      return Promise.reject(new DOMException(
+        `WebMCP: a tool named "${tool.name}" is already registered`, 'InvalidStateError'));
+    }
+
+    const signal = options.signal;
+    // An already-aborted signal registers nothing, rather than registering a
+    // tool that is immediately removed and fires two events doing it.
+    if (signal?.aborted) return Promise.resolve();
+
+    this.#tools.set(tool.name, tool);
+    signal?.addEventListener('abort', () => {
+      if (this.#tools.get(tool.name) === tool) {
+        this.#tools.delete(tool.name);
+        this.#notify();
+      }
+    }, { once: true });
+
+    this.#notify();
+    return Promise.resolve();
+  }
+
+  /** @returns {Promise<Array<object>>} */
+  getTools() {
+    return Promise.resolve([...this.#tools.values()].map(toRegistered));
+  }
+
+  /**
+   * Runs a tool and resolves with its JSON-serialized result, as the spec does.
+   *
+   * @param {{name: string}|string} tool A RegisteredTool, or a bare name.
+   * @returns {Promise<string>}
+   */
+  async executeTool(tool, inputObject = {}, options = {}) {
+    const name = typeof tool === 'string' ? tool : tool?.name;
+    const found = this.#tools.get(name);
+    if (!found) {
+      throw new DOMException(`WebMCP: no tool named "${name}"`, 'NotFoundError');
+    }
+
+    // Each execution gets its own signal. Withdrawing a registration does not
+    // cancel an execution already in flight; the spec treats them separately.
+    const controller = new AbortController();
+    options.signal?.addEventListener('abort', () => controller.abort(options.signal.reason), { once: true });
+
+    this.dispatchEvent(new Event('toolactivated'));
+    try {
+      const value = await found.execute(inputObject, { signal: controller.signal });
+      // The platform serializes the fulfilled value; a handler returning a
+      // string gets it back verbatim rather than JSON-quoted.
+      return typeof value === 'string' ? value : JSON.stringify(value ?? null);
+    } catch (error) {
+      if (controller.signal.aborted) this.dispatchEvent(new Event('toolcancel'));
       throw error;
     }
   }
-  unregisterTool(name) {
-    const controller = this.#registrations.get(name);
-    if (!controller) return false;
-    this.#registrations.delete(name);
-    controller.abort();
-    return true;
-  }
-  provideContext({ tools = [] } = {}) {
-    tools.forEach(assertToolDescriptor);
-    for (const name of this.#registrations.keys()) this.unregisterTool(name);
-    return Promise.all(tools.map(tool => this.registerTool(tool)));
+
+  #notify() {
+    this.dispatchEvent(new Event(TOOL_CHANGE_EVENT));
   }
 }
 
+// `ontoolchange` and friends, so a page can assign a handler rather than add a
+// listener. EventTarget gives no `on*` support for free.
+for (const type of ['toolchange', 'toolactivated', 'toolcancel']) {
+  const key = Symbol(`on${type}`);
+  Object.defineProperty(ModelContextPolyfill.prototype, `on${type}`, {
+    configurable: true,
+    get() { return this[key] ?? null; },
+    set(handler) {
+      if (this[key]) this.removeEventListener(type, this[key]);
+      this[key] = typeof handler === 'function' ? handler : null;
+      if (this[key]) this.addEventListener(type, this[key]);
+    }
+  });
+}
+
 /**
- * Installs the polyfill. No-op when the browser ships WebMCP natively, so a page
- * always talks to the real implementation where one exists.
+ * Installs the polyfill at `document.modelContext`.
  *
- * @param {{allowInsecureContext?: boolean}} [options] Set `allowInsecureContext`
- *   to install off a secure context — for an offline bundle or an intranet
- *   address, where no native implementation is coming.
+ * Native is detected **at `document`, first**. An existing `navigator.modelContext`
+ * says nothing: it may be an older copy of this very polyfill, and deferring to
+ * it would leave the page talking to a registry no agent can see.
+ *
+ * @param {{allowInsecureContext?: boolean}} [options]
  * @returns {boolean} true if this call installed the polyfill.
  */
 export function installWebmcpPolyfill({ allowInsecureContext = false } = {}) {
-  if ('modelContext' in navigator) return false;
-  if (globalThis.document?.modelContext?.registerTool) {
-    Object.defineProperty(navigator, 'modelContext', {
-      value: new DocumentModelContextAdapter(document.modelContext),
-      configurable: true, enumerable: false, writable: false
-    });
-    return false;
-  }
+  const doc = globalThis.document;
+  if (!doc) return false;
+
+  // A real implementation, or one we installed earlier. Either way, leave it.
+  if (doc.modelContext && typeof doc.modelContext.registerTool === 'function') return false;
 
   // The native API is [SecureContext], and matching it stops a page being built
   // against a surface the browser will never provide. That reasoning does not
   // hold everywhere: an offline bundle, or a page served to a LAN address, has
   // no native implementation coming and the check only blocks. Hence the opt-in.
-  if (!window.isSecureContext && !allowInsecureContext) {
+  // In a browser globalThis *is* window; under a harness that installs jsdom
+  // globals piecemeal it is not, and reading only one of them silently refuses
+  // to install.
+  const secure = globalThis.isSecureContext ?? globalThis.window?.isSecureContext;
+  if (!secure && !allowInsecureContext) {
     console.warn(
       `WebMCP: ${globalThis.location?.origin ?? 'this page'} is not a secure context, so ` +
-        'navigator.modelContext was not installed. A secure origin, localhost or 127.0.0.1 ' +
-        'qualifies; ' +
-        'a LAN address or custom hostname does not. For an offline or intranet bundle, opt in ' +
-        'with <machvive-webmcp-polyfill allow-insecure> or ' +
+        'document.modelContext was not installed. A secure origin, localhost or 127.0.0.1 ' +
+        'qualifies; a LAN address or custom hostname does not. For an offline or intranet ' +
+        'bundle, opt in with <machvive-webmcp-polyfill allow-insecure> or ' +
         'installWebmcpPolyfill({ allowInsecureContext: true }).'
     );
     return false;
   }
 
-  Object.defineProperty(navigator, 'modelContext', {
+  Object.defineProperty(doc, 'modelContext', {
     value: new ModelContextPolyfill(),
     configurable: true,
     enumerable: false,
@@ -188,13 +202,13 @@ export class MachviveWebmcpPolyfill extends HTMLElement {
     this.shadowRoot.innerHTML = `<style>:host { display: none; }</style>`;
   }
 
-  /** Convenience passthroughs so markup-driven pages need not reach into navigator. */
-  registerTool(tool) {
-    return navigator.modelContext?.registerTool(tool);
+  /** Convenience passthrough so markup-driven pages need not reach into document. */
+  registerTool(tool, options) {
+    return globalThis.document?.modelContext?.registerTool(tool, options);
   }
 
-  unregisterTool(name) {
-    return navigator.modelContext?.unregisterTool(name);
+  getTools() {
+    return globalThis.document?.modelContext?.getTools();
   }
 }
 

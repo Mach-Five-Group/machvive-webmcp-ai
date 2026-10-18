@@ -1,13 +1,13 @@
 import { THEME_CSS } from '../shared/theme.js';
 import { loremIpsum, loremSentence, LANGUAGES } from './generator.js';
 // Imported for its side effect as well as the constant: the polyfill installs on
-// load, so a page gets `navigator.modelContext` whichever module it reaches for
+// load, so a page gets `document.modelContext` whichever module it reaches for
 // first. Analytics shipped without this import once and captured nothing,
 // because the documented import order left it registering against no registry.
-import { TOOLS_CHANGED_EVENT } from '../machvive-webmcp-polyfill/machvive-webmcp-polyfill.js';
+import { TOOL_CHANGE_EVENT } from '../machvive-webmcp-polyfill/machvive-webmcp-polyfill.js';
 
 export { loremIpsum, loremSentence, LANGUAGES, WORD_BANKS } from './generator.js';
-export { TOOLS_CHANGED_EVENT };
+export { TOOL_CHANGE_EVENT };
 
 /** The tool this element publishes. One per page, whatever the element count. */
 export const PLACEHOLDER_TOOL = 'generate_placeholder_text';
@@ -20,6 +20,8 @@ export const PLACEHOLDER_TOOL = 'generate_placeholder_text';
  * under one name, each silently replacing the last.
  */
 let owner = null;
+/** The owner's registration. Aborting it is how the tool is withdrawn. */
+let registration = null;
 
 /**
  * Placeholder copy that generates itself.
@@ -195,14 +197,21 @@ ${THEME_CSS}
   /**
    * Publishes the tool, taking ownership from another block if it has it.
    *
-   * Needed because `provideContext` *replaces* the whole toolset by design, so
-   * any page that calls it silently drops tools published by elements. There is
-   * no listening for that: re-registering automatically would fight a page that
-   * curated its toolset on purpose, and could ping-pong against the change event
-   * it would itself cause. So the page asks, explicitly.
+   * The spec removed `provideContext`, so a page can no longer wipe the toolset
+   * wholesale — but a registration can still be withdrawn by whoever holds the
+   * signal, and an element may need to take the name back. So the page asks,
+   * explicitly, rather than this listening for `toolchange` and fighting
+   * whoever withdrew it.
    */
   publishTool() {
-    owner = null;
+    // Abort rather than just dropping the owner: the incumbent's controller is
+    // the only handle on its registration, so overwriting it would leave the
+    // name registered with nothing able to withdraw it ever again.
+    if (owner !== this) {
+      registration?.abort();
+      registration = null;
+      owner = null;
+    }
     this.#claimTool();
     return this;
   }
@@ -215,16 +224,21 @@ ${THEME_CSS}
 
   #claimTool() {
     if (this.hasAttribute('no-tool')) return;
-    const context = globalThis.navigator?.modelContext;
+    const context = globalThis.document?.modelContext;
     if (!context) return;
 
-    // Ownership alone is not enough to skip: after provideContext the owner
-    // still points here while the registry no longer holds the tool, and a
-    // bare `if (owner) return` would leave the page advertising nothing.
-    const live = context.tools?.some((tool) => tool.name === PLACEHOLDER_TOOL);
-    if (owner && live) return;
+    // Liveness is read from our own registration rather than the registry.
+    // `getTools()` is async and this path is not, and a native implementation
+    // exposes no synchronous view — so the controller we hold is both the
+    // cheapest and the only reliable answer.
+    if (owner?.isConnected && registration && !registration.signal.aborted) return;
 
+    // Reached only when the incumbent is gone or withdrawn, but abort it anyway:
+    // the invariant is that nothing replaces a live registration without
+    // aborting it, since the controller is the only way to take the name back.
+    registration?.abort();
     owner = this;
+    registration = new AbortController();
     context.registerTool({
       name: PLACEHOLDER_TOOL,
       description:
@@ -240,6 +254,7 @@ ${THEME_CSS}
           seed: { type: 'integer', description: 'Omit for fresh copy; set for repeatable output' }
         }
       },
+      annotations: { readOnlyHint: false },
       execute: async (params = {}) => {
         // Only forward what was actually supplied, so the element's own
         // attributes remain the defaults rather than being overwritten by
@@ -247,15 +262,20 @@ ${THEME_CSS}
         for (const key of ['lang', 'sentences', 'paragraphs', 'seed']) {
           if (params[key] !== undefined && params[key] !== '') this[key] = params[key];
         }
-        const text = this.regenerate();
-        return { content: [{ type: 'text', text }] };
+        // The platform serializes whatever this resolves with; the old
+        // `{content:[...]}` wrapper was our own invention and is now noise.
+        return this.regenerate();
       }
+    }, { signal: registration.signal }).catch((error) => {
+      console.warn(`[machvive] could not register ${PLACEHOLDER_TOOL}:`, error.message);
+      if (owner === this) { owner = null; registration = null; }
     });
   }
 
   #releaseTool() {
     if (owner !== this) return;
-    globalThis.navigator?.modelContext?.unregisterTool(PLACEHOLDER_TOOL);
+    registration?.abort();
+    registration = null;
     owner = null;
 
     // Hand the tool to another placeholder still on the page, so removing one

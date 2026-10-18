@@ -3,12 +3,12 @@
  * and exposes them for listing, editing, export, replay, and dataLayer push.
  *
  * Instrumentation wraps each tool's `execute` handler at registration time rather
- * than hooking the polyfill's `callTool`. That captures invocations from any
- * caller, including a native `navigator.modelContext` and real agents, neither of
+ * than hooking the registry's execute path. That captures invocations from any
+ * caller, including a native `document.modelContext` and real agents, neither of
  * which route through our code.
  */
 
-// Importing the polyfill guarantees navigator.modelContext exists before
+// Importing the polyfill guarantees document.modelContext exists before
 // installAnalytics() runs. Without this, importing analytics first — which is
 // exactly what capturing every call requires — finds no registry to instrument
 // and silently captures nothing.
@@ -211,9 +211,9 @@ export class CallLog {
   async replay(id, params) {
     const entry = this.#entries.find((e) => e.id === id);
     if (!entry) throw new Error(`Analytics: no captured call ${id}`);
-    const mc = globalThis.navigator?.modelContext;
-    if (!mc?.callTool) throw new Error('Analytics: navigator.modelContext.callTool is unavailable');
-    return mc.callTool(entry.tool, params ?? entry.params ?? {});
+    const mc = globalThis.document?.modelContext;
+    if (!mc?.executeTool) throw new Error('Analytics: document.modelContext.executeTool is unavailable');
+    return mc.executeTool(entry.tool, params ?? entry.params ?? {});
   }
 
   /** Pushes one entry to window.dataLayer in a GTM-friendly flat shape. */
@@ -337,31 +337,51 @@ function instrumentTool(tool, log) {
 let installed = false;
 
 /**
- * Instruments `navigator.modelContext` so future registrations are captured.
+ * Instruments `document.modelContext` so future registrations are captured.
  *
- * Tools registered *before* this runs cannot be instrumented — the polyfill hides
- * handlers from `tools` by design — so import this module before registering.
+ * Tools registered *before* this runs cannot be instrumented — the registry
+ * never exposes handlers, so there is nothing to re-wrap — which is why this
+ * module must be imported before anything registers.
+ *
+ * **On a native implementation this shadows `registerTool` with an own
+ * property.** That is a mutation of a platform object, and the browser is
+ * within its rights to refuse it; if the assignment fails, capture is
+ * unavailable and this says so rather than appearing to work. There is no
+ * other hook: the point of wrapping at registration is to catch invocations
+ * from agents that never pass through our code.
  *
  * @returns {boolean} true if this call instrumented the registry.
  */
 export function installAnalytics(log = callLog) {
-  const mc = globalThis.navigator?.modelContext;
+  const mc = globalThis.document?.modelContext;
   if (!mc || installed) return false;
 
-  if (mc.tools?.length) {
-    console.warn(
-      `WebMCP analytics: ${mc.tools.length} tool(s) were registered before analytics loaded ` +
-        'and will not be captured. Import the analytics module earlier.'
-    );
-  }
+  // getTools() is async, so the "too late" warning cannot block installation.
+  // Fire it off and report after the fact; being told late still tells you.
+  // Promise.resolve wraps it because this runs at import time: an implementation
+  // whose getTools returns a non-promise would otherwise throw synchronously
+  // here and take the whole module down with it.
+  Promise.resolve()
+    .then(() => mc.getTools?.())
+    .then((tools) => {
+      if (tools?.length) {
+        console.warn(
+          `WebMCP analytics: ${tools.length} tool(s) were registered before analytics loaded ` +
+            'and will not be captured. Import the analytics module earlier.'
+        );
+      }
+    })
+    .catch(() => {});
 
   const register = mc.registerTool.bind(mc);
-  mc.registerTool = (tool) => register(instrumentTool(tool, log));
-
-  if (typeof mc.provideContext === 'function') {
-    const provide = mc.provideContext.bind(mc);
-    mc.provideContext = (config = {}) =>
-      provide({ ...config, tools: (config.tools ?? []).map((t) => instrumentTool(t, log)) });
+  try {
+    mc.registerTool = (tool, options) => register(instrumentTool(tool, log), options);
+  } catch (error) {
+    console.warn(
+      'WebMCP analytics: this implementation does not allow wrapping registerTool, ' +
+        `so tool calls will not be captured (${error.message}).`
+    );
+    return false;
   }
 
   installed = true;

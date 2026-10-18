@@ -12,11 +12,11 @@
  * no credentials of any kind.
  */
 import { THEME_CSS } from '../shared/theme.js';
-import { TOOLS_CHANGED_EVENT } from '../machvive-webmcp-polyfill/machvive-webmcp-polyfill.js';
+import { TOOL_CHANGE_EVENT } from '../machvive-webmcp-polyfill/machvive-webmcp-polyfill.js';
 import { collectProducts, readDocumentJsonLd, facetsOf } from './jsonld.js';
 
 export { collectProducts, normalizeProduct, readDocumentJsonLd, facetsOf } from './jsonld.js';
-export { TOOLS_CHANGED_EVENT };
+export { TOOL_CHANGE_EVENT };
 
 export const PRODUCT_TOOLS = Object.freeze({
   SEARCH: 'search_products',
@@ -26,6 +26,8 @@ export const PRODUCT_TOOLS = Object.freeze({
 
 /** Tool names are a page-wide namespace, so one element owns them at a time. */
 let owner = null;
+/** The owner's registrations. Aborting withdraws all three tools at once. */
+let registration = null;
 
 /** A tool result lands in an agent's context window; a whole catalogue must not. */
 const DEFAULT_LIMIT = 10;
@@ -159,15 +161,21 @@ ${THEME_CSS}
 
   #publish() {
     if (this.hasAttribute('no-tool')) return;
-    const context = globalThis.navigator?.modelContext;
+    const context = globalThis.document?.modelContext;
     if (!context) return;
 
-    // Ownership plus liveness: after provideContext the owner still points here
-    // while the registry holds nothing, and checking ownership alone would
-    // leave the page advertising no tools at all.
-    const live = context.tools?.some((t) => t.name === PRODUCT_TOOLS.SEARCH);
-    if (owner && owner !== this && live) return;
+    // Liveness comes from the controller we hold, not from the registry:
+    // `getTools()` is async and this path is not, and a native implementation
+    // offers no synchronous view of what is registered.
+    if (owner?.isConnected && owner !== this && registration && !registration.signal.aborted) return;
+
+    // Taking over, or re-publishing: withdraw whatever is outstanding first, or
+    // the three names collide with themselves and every register rejects.
+    registration?.abort();
+    registration = new AbortController();
     owner = this;
+    const signal = registration.signal;
+    const failed = (error) => console.warn('[machvive] product tool registration failed:', error.message);
 
     const facets = this.facets;
     const enumOf = (values) => (values.length ? { enum: values } : {});
@@ -203,7 +211,7 @@ ${THEME_CSS}
         }
       },
       execute: async (params = {}) => this.#search(params)
-    });
+    }, { signal }).catch(failed);
 
     context.registerTool({
       name: PRODUCT_TOOLS.GET,
@@ -214,7 +222,7 @@ ${THEME_CSS}
         required: ['id']
       },
       execute: async ({ id } = {}) => this.#get(id)
-    });
+    }, { signal }).catch(failed);
 
     context.registerTool({
       name: PRODUCT_TOOLS.FACETS,
@@ -222,14 +230,14 @@ ${THEME_CSS}
         'List the categories, brands, stock states and price range present on this page. ' +
         'Call this before search_products to learn what the valid filter values are.',
       inputSchema: { type: 'object', properties: {} },
-      execute: async () => text(this.facets)
-    });
+      execute: async () => this.facets
+    }, { signal }).catch(failed);
   }
 
   #release() {
     if (owner !== this) return;
-    const context = globalThis.navigator?.modelContext;
-    for (const name of Object.values(PRODUCT_TOOLS)) context?.unregisterTool(name);
+    registration?.abort();
+    registration = null;
     owner = null;
 
     for (const candidate of globalThis.document?.querySelectorAll?.('machvive-webmcp-products') ?? []) {
@@ -244,7 +252,7 @@ ${THEME_CSS}
     // Reject rather than truncate. Silently shortening a query means answering
     // a question the agent did not ask, and it has no way to notice.
     if (typeof query === 'string' && query.length > MAX_QUERY) {
-      return text({ error: `query must be ${MAX_QUERY} characters or fewer`, received: query.length }, true);
+      throw new ToolInputError(`query must be ${MAX_QUERY} characters or fewer (received ${query.length})`);
     }
     const needle = typeof query === 'string' ? query.trim().toLowerCase() : '';
     const terms = needle ? needle.split(/\s+/) : [];
@@ -268,7 +276,7 @@ ${THEME_CSS}
     const size = Math.min(MAX_LIMIT, Math.max(1, Number(limit) || DEFAULT_LIMIT));
     const page = matches.slice(start, start + size);
 
-    return text({
+    return {
       total: matches.length,
       returned: page.length,
       offset: start,
@@ -276,14 +284,14 @@ ${THEME_CSS}
       // answer will confidently report "there are 10 products".
       truncated: start + page.length < matches.length,
       products: page.map(summarize)
-    });
+    };
   }
 
   #get(id) {
     const raw = String(id ?? '').trim();
-    if (!raw) return text({ error: 'id is required' }, true);
+    if (!raw) throw new ToolInputError('id is required');
     if (raw.length > MAX_ID) {
-      return text({ error: `id must be ${MAX_ID} characters or fewer`, received: raw.length }, true);
+      throw new ToolInputError(`id must be ${MAX_ID} characters or fewer (received ${raw.length})`);
     }
     const needle = raw.toLowerCase();
     const matches = (value) => String(value).toLowerCase() === needle;
@@ -294,17 +302,20 @@ ${THEME_CSS}
       || (p.variants?.skus ?? []).some(matches)
       || (p.variants?.gtins ?? []).some(matches));
     if (!found) {
-      return text({ error: `no product matches "${id}"`, known: this.#products.length }, true);
+      throw new ToolInputError(`no product matches "${id}" (${this.#products.length} products on this page)`);
     }
     const { raw: jsonld, ...rest } = found;
-    return text({ ...rest, jsonld });
+    return { ...rest, jsonld };
   }
 }
 
-/** MCP results are text; JSON is what an agent can actually act on. */
-function text(value, isError = false) {
-  return { content: [{ type: 'text', text: JSON.stringify(value, null, 2) }], ...(isError ? { isError: true } : {}) };
-}
+/**
+ * The platform serializes whatever a handler resolves with, so returning the
+ * object directly is both simpler and exactly what an agent receives. Errors
+ * are thrown rather than flagged: the spec has no `isError`, and a rejected
+ * promise is how a failed execution is reported.
+ */
+class ToolInputError extends Error {}
 
 if (!customElements.get('machvive-webmcp-products')) {
   customElements.define('machvive-webmcp-products', MachviveWebmcpProducts);

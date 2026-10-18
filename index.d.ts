@@ -9,15 +9,17 @@ export type { LoremLanguage, LoremOptions } from './src/wc/machvive-lorum-ipsum/
 export {
   MachviveWebmcpPolyfill,
   installWebmcpPolyfill,
-  TOOLS_CHANGED_EVENT
+  TOOL_CHANGE_EVENT
 } from './src/wc/machvive-webmcp-polyfill/machvive-webmcp-polyfill.js';
 export type {
+  ExecuteToolOptions,
   ModelContext,
-  WebmcpAgent,
+  RegisterToolOptions,
+  RegisteredTool,
+  ToolAnnotations,
+  ToolExecuteOptions,
   WebmcpContent,
-  WebmcpToolDescriptor,
-  WebmcpToolResult,
-  WebmcpToolSummary
+  WebmcpToolDescriptor
 } from './src/wc/machvive-webmcp-polyfill/machvive-webmcp-polyfill.js';
 export { MachviveWebmcpInspect } from './src/wc/machvive-webmcp-inspect/machvive-webmcp-inspect.js';
 export {

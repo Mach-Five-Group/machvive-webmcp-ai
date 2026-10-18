@@ -9,7 +9,7 @@ import {
 import {
   MachviveWebmcpPolyfill,
   installWebmcpPolyfill,
-  TOOLS_CHANGED_EVENT
+  TOOL_CHANGE_EVENT
 } from './src/wc/machvive-webmcp-polyfill/machvive-webmcp-polyfill.js';
 import { MachviveWebmcpInspect } from './src/wc/machvive-webmcp-inspect/machvive-webmcp-inspect.js';
 import {
@@ -50,6 +50,6 @@ export {
   callLog,
   installWebmcpPolyfill,
   installAnalytics,
-  TOOLS_CHANGED_EVENT,
+  TOOL_CHANGE_EVENT,
   CALL_EVENT
 };

@@ -1,12 +1,20 @@
 import { test, describe, beforeEach, before } from 'node:test';
 import assert from 'node:assert/strict';
 
-let mc;
+import { toolBench } from './helpers.js';
+
+let mc, bench;
 const tick = () => new Promise((r) => setTimeout(r, 20));
 
-const mount = () => {
+/**
+ * Mounting settles before returning: the inspector reads its tool list through
+ * the async getTools(), so a DOM assertion taken straight after append would
+ * race the first render and see an empty panel.
+ */
+const mount = async () => {
   const el = document.createElement('machvive-webmcp-inspect');
   document.body.append(el);
+  await tick();
   return el;
 };
 
@@ -30,53 +38,64 @@ const CART_TOOL = {
 
 before(async () => {
   await import('../src/wc/machvive-webmcp-inspect/machvive-webmcp-inspect.js');
-  mc = navigator.modelContext;
+  mc = document.modelContext;
+  bench = toolBench(mc);
 });
+
+/**
+ * Sets the page's toolset. The spec removed provideContext, so this is the same
+ * intent expressed the way 7.0 requires: withdraw what the previous test
+ * registered through its signal, then register the new list.
+ */
+const setTools = (...list) => {
+  bench.reset();
+  for (const t of list) bench.register(t);
+};
 
 beforeEach(() => {
   document.body.innerHTML = '';
-  mc.provideContext({ tools: [] });
+  setTools();
 });
 
 describe('tool discovery', () => {
-  test('lists registered tools', () => {
-    mc.provideContext({ tools: [CART_TOOL, { name: 'search', execute: () => 'x' }] });
-    const el = mount();
+  test('lists registered tools', async () => {
+    setTools(CART_TOOL, { name: 'search', description: 'Search the catalogue', execute: () => 'x' });
+    const el = await mount();
     const names = [...el.shadowRoot.querySelectorAll('[data-tool]')].map((b) => b.dataset.tool);
     assert.deepEqual(names, ['add_to_cart', 'search']);
   });
 
-  test('shows an empty state when nothing is registered', () => {
-    const el = mount();
+  test('shows an empty state when nothing is registered', async () => {
+    const el = await mount();
     assert.match(el.shadowRoot.textContent, /No tools registered/);
   });
 
   test('refreshes when a tool is registered after mount', async () => {
-    const el = mount();
+    const el = await mount();
     assert.match(el.shadowRoot.textContent, /No tools registered/);
-    mc.registerTool(CART_TOOL);
+    bench.register(CART_TOOL);
     await tick();
     assert.ok(el.shadowRoot.querySelector('[data-tool="add_to_cart"]'));
   });
 
-  test('renders the tool description', () => {
-    mc.registerTool(CART_TOOL);
-    const el = mount();
+  test('renders the tool description', async () => {
+    bench.register(CART_TOOL);
+    const el = await mount();
     assert.match(el.shadowRoot.textContent, /Add a product to the cart/);
   });
 
-  test('handles a tool with no inputSchema', () => {
-    mc.registerTool({ name: 'ping', execute: () => 'pong' });
-    const el = mount();
+  test('handles a tool with no inputSchema', async () => {
+    bench.register({ name: 'ping', description: 'Check the page is responding', execute: () => 'pong' });
+    const el = await mount();
     assert.match(el.shadowRoot.textContent, /takes no parameters/);
   });
 });
 
 describe('schema-driven form', () => {
   let el;
-  beforeEach(() => {
-    mc.provideContext({ tools: [CART_TOOL] });
-    el = mount();
+  beforeEach(async () => {
+    setTools(CART_TOOL);
+    el = await mount();
   });
 
   const field = (name) => el.shadowRoot.querySelector(`[data-field="${name}"]`);
@@ -108,9 +127,9 @@ describe('execution', () => {
   const field = (name) => el.shadowRoot.querySelector(`[data-field="${name}"]`);
   const output = () => el.shadowRoot.querySelector('pre')?.textContent ?? '';
 
-  beforeEach(() => {
-    mc.provideContext({ tools: [CART_TOOL] });
-    el = mount();
+  beforeEach(async () => {
+    setTools(CART_TOOL);
+    el = await mount();
   });
 
   test('blocks execution when a required field is empty', async () => {
@@ -134,18 +153,16 @@ describe('execution', () => {
   test('passes real numbers and booleans, not their string spellings', async () => {
     // Template interpolation renders '3' and 3 identically, so assert the runtime
     // type the handler actually received.
-    mc.provideContext({
-      tools: [{
-        name: 'types',
+    setTools({
+        name: 'types', description: 'Report the runtime type of each parameter it received',
         inputSchema: { type: 'object', properties: {
           qty: { type: 'integer' }, ratio: { type: 'number' }, gift: { type: 'boolean' }
         } },
         execute: (p) => JSON.stringify(Object.fromEntries(
           Object.entries(p).map(([k, v]) => [k, typeof v])
         ))
-      }]
-    });
-    el = mount();
+      });
+    el = await mount();
     el.shadowRoot.querySelector('[data-field="qty"]').value = '3';
     el.shadowRoot.querySelector('[data-field="ratio"]').value = '1.5';
     el.shadowRoot.querySelector('[data-field="gift"]').checked = true;
@@ -154,14 +171,12 @@ describe('execution', () => {
   });
 
   test('truncates a fractional value in an integer field', async () => {
-    mc.provideContext({
-      tools: [{
-        name: 'ints',
+    setTools({
+        name: 'ints', description: 'Echo the integer it was given',
         inputSchema: { type: 'object', properties: { n: { type: 'integer' } } },
         execute: ({ n }) => `n=${n}`
-      }]
-    });
-    el = mount();
+      });
+    el = await mount();
     el.shadowRoot.querySelector('[data-field="n"]').value = '4.9';
     await submit();
     assert.match(output(), /n=4$/, 'integer fields must not pass 4.9 through');
@@ -199,20 +214,16 @@ describe('execution', () => {
   });
 
   test('surfaces a failing tool as an error result', async () => {
-    mc.provideContext({
-      tools: [{ name: 'boom', inputSchema: { type: 'object', properties: {} }, execute: () => { throw new Error('kaboom'); } }]
-    });
-    el = mount();
+    setTools({ name: 'boom', description: 'Always fails, so error handling can be exercised', inputSchema: { type: 'object', properties: {} }, execute: () => { throw new Error('kaboom'); } });
+    el = await mount();
     await submit();
     assert.match(output(), /kaboom/);
     assert.ok(el.shadowRoot.querySelector('pre.error'), 'error results should be styled as errors');
   });
 
   test('switching tools clears the previous result', async () => {
-    mc.provideContext({
-      tools: [CART_TOOL, { name: 'other', inputSchema: { type: 'object', properties: {} }, execute: () => 'other-ran' }]
-    });
-    el = mount();
+    setTools(CART_TOOL, { name: 'other', description: 'A second tool, for switching between them', inputSchema: { type: 'object', properties: {} }, execute: () => 'other-ran' });
+    el = await mount();
     el.shadowRoot.querySelector('[data-field="sku"]').value = 'X';
     await submit();
     assert.notEqual(el.shadowRoot.querySelector('pre'), null);
@@ -224,13 +235,13 @@ describe('execution', () => {
 });
 
 describe('floating mode', () => {
-  test('is inline by default with no toggle visible', () => {
-    const el = mount();
+  test('is inline by default with no toggle visible', async () => {
+    const el = await mount();
     assert.equal(el.hasAttribute('floating'), false);
   });
 
-  test('show() and hide() drive the open attribute', () => {
-    const el = mount();
+  test('show() and hide() drive the open attribute', async () => {
+    const el = await mount();
     el.setAttribute('floating', '');
     el.show();
     assert.equal(el.hasAttribute('open'), true);
@@ -239,7 +250,7 @@ describe('floating mode', () => {
   });
 
   test('the toggle button flips open state', async () => {
-    const el = mount();
+    const el = await mount();
     el.setAttribute('floating', '');
     await tick();
     el.shadowRoot.querySelector('.fab').click();
@@ -249,40 +260,43 @@ describe('floating mode', () => {
 
 describe('degraded environments', () => {
   test('explains itself when modelContext lacks discovery', async () => {
-    const real = navigator.modelContext;
-    // A native implementation exposes neither tools nor callTool.
-    Object.defineProperty(navigator, 'modelContext', {
-      value: { registerTool() {} }, configurable: true
+    const real = document.modelContext;
+    // 7.0 drives the inspector through getTools/executeTool, which ARE spec
+    // surface — so a native implementation is usable and this path is reached
+    // only by something that registers but cannot be enumerated or invoked.
+    Object.defineProperty(document, 'modelContext', {
+      value: { registerTool() {}, addEventListener() {}, removeEventListener() {} },
+      configurable: true
     });
-    const el = mount();
+    const el = await mount();
     assert.match(el.shadowRoot.textContent, /unavailable/);
-    Object.defineProperty(navigator, 'modelContext', { value: real, configurable: true });
+    Object.defineProperty(document, 'modelContext', { value: real, configurable: true });
   });
 });
 
 describe('floating placement and hotkey', () => {
   const css = (el) => el.shadowRoot.querySelector('style').textContent;
 
-  test('offers all four corners, since bottom-right is usually taken', () => {
+  test('offers all four corners, since bottom-right is usually taken', async () => {
     // Chat widgets, cookie banners and support launchers all live bottom-right;
     // a fixed corner means landing on top of one.
-    const el = mount();
+    const el = await mount();
     for (const corner of ['bottom-left', 'top-right', 'top-left']) {
       assert.ok(css(el).includes(`[position="${corner}"]`), `${corner} missing`);
     }
   });
 
-  test('offsets are custom properties, so a page can nudge it', () => {
-    assert.match(css(mount()), /--mv-fab-offset-block/);
-    assert.match(css(mount()), /--mv-fab-offset-inline/);
+  test('offsets are custom properties, so a page can nudge it', async () => {
+    assert.match(css(await mount()), /--mv-fab-offset-block/);
+    assert.match(css(await mount()), /--mv-fab-offset-inline/);
   });
 
-  test('hidden-fab keeps the panel reachable with no launcher drawn', () => {
-    assert.match(css(mount()), /\[hidden-fab\]\) \.fab \{ display: none/);
+  test('hidden-fab keeps the panel reachable with no launcher drawn', async () => {
+    assert.match(css(await mount()), /\[hidden-fab\]\) \.fab \{ display: none/);
   });
 
   test('a hotkey toggles the panel', async () => {
-    const el = mount();
+    const el = await mount();
     el.setAttribute('floating', '');
     el.setAttribute('hotkey', 'ctrl+shift+k');
     el.remove();
@@ -297,14 +311,14 @@ describe('floating placement and hotkey', () => {
   });
 
   test('ignores the key without its modifiers, and binds nothing without the attribute', async () => {
-    const el = mount();
+    const el = await mount();
     el.setAttribute('floating', '');
     el.setAttribute('hotkey', 'ctrl+shift+k');
     el.remove(); document.body.append(el); await tick();
     window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'k' }));
     assert.equal(el.hasAttribute('open'), false, 'bare key must not fire');
 
-    const plain = mount();
+    const plain = await mount();
     plain.setAttribute('floating', '');
     window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'k', ctrlKey: true, shiftKey: true }));
     assert.equal(plain.hasAttribute('open'), false, 'no hotkey attribute means no listener');

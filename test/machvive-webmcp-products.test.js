@@ -8,11 +8,23 @@ import { PRODUCT_TOOLS } from '../src/wc/machvive-webmcp-products/machvive-webmc
 const SAMPLE = readFileSync(
   fileURLToPath(new URL('./fixtures/products.jsonld.json', import.meta.url)), 'utf8');
 
-const tools = () => navigator.modelContext?.tools ?? [];
-const named = (n) => tools().find((t) => t.name === n);
+const tools = async () => (await document.modelContext.getTools()) ?? [];
+const named = async (n) => (await tools()).find((t) => t.name === n);
+
+/**
+ * Resolves with the parsed result, or an error when the tool rejects.
+ *
+ * 7.0 errors are rejections rather than an isError result, so a test that wants
+ * to assert on a refusal has to catch it — and one that does not want a refusal
+ * fails loudly on error instead of reading a field that is simply absent.
+ */
 const call = async (n, params) => {
-  const r = await navigator.modelContext.callTool(n, params);
-  return { raw: r, data: JSON.parse(r.content[0].text) };
+  try {
+    const raw = await document.modelContext.executeTool(n, params);
+    return { raw, data: JSON.parse(raw), error: null };
+  } catch (error) {
+    return { raw: null, data: null, error };
+  }
 };
 
 /** Puts the sample on the page the way a real site carries it. */
@@ -35,14 +47,14 @@ describe('<machvive-webmcp-products>', () => {
   beforeEach(() => document.body.replaceChildren());
 
   test('importing it installs the polyfill', () => {
-    assert.ok(navigator.modelContext, 'registering against a missing registry is the analytics bug');
+    assert.ok(document.modelContext, 'registering against a missing registry is the analytics bug');
   });
 
   test('reads the JSON-LD already on the page and publishes three tools', async () => {
     withJsonLd();
     const el = await mount();
     assert.equal(el.products.length, 4);
-    for (const name of Object.values(PRODUCT_TOOLS)) assert.ok(named(name), `${name} missing`);
+    for (const name of Object.values(PRODUCT_TOOLS)) assert.ok(await named(name), `${name} missing`);
   });
 
   test('a page with no product JSON-LD says so rather than failing', async () => {
@@ -56,7 +68,7 @@ describe('<machvive-webmcp-products>', () => {
   test('filter enums are built from the page’s own data', async () => {
     withJsonLd();
     await mount();
-    const schema = named(PRODUCT_TOOLS.SEARCH).inputSchema.properties;
+    const schema = (await named(PRODUCT_TOOLS.SEARCH)).inputSchema.properties;
     // This is what makes the inspector render a select of real values, and
     // what stops an agent guessing a category name that does not exist.
     assert.deepEqual(schema.category.enum, ['HVAC Actuators', 'Network Devices']);
@@ -70,7 +82,7 @@ describe('<machvive-webmcp-products>', () => {
     // clamped. This was a real finding from a third-party scan.
     withJsonLd();
     await mount();
-    const search = named(PRODUCT_TOOLS.SEARCH).inputSchema.properties;
+    const search = (await named(PRODUCT_TOOLS.SEARCH)).inputSchema.properties;
 
     assert.equal(search.limit.maximum, 50, 'the description promises max 50');
     assert.equal(search.limit.minimum, 1);
@@ -80,7 +92,7 @@ describe('<machvive-webmcp-products>', () => {
     assert.equal(search.maxPrice.minimum, 0);
     assert.ok(search.query.maxLength > 0, 'free text must be bounded');
 
-    const get = named(PRODUCT_TOOLS.GET).inputSchema.properties;
+    const get = (await named(PRODUCT_TOOLS.GET)).inputSchema.properties;
     assert.ok(get.id.maxLength > 0);
     assert.equal(get.id.minLength, 1);
   });
@@ -93,20 +105,20 @@ describe('<machvive-webmcp-products>', () => {
     }));
     withJsonLd(JSON.stringify(many));
     const el = await mount();
-    const schema = named(PRODUCT_TOOLS.SEARCH).inputSchema.properties;
+    const schema = (await named(PRODUCT_TOOLS.SEARCH)).inputSchema.properties;
     const { data } = await call(PRODUCT_TOOLS.SEARCH, { limit: schema.limit.maximum + 1000 });
     assert.equal(data.returned, schema.limit.maximum);
 
     // An over-long query is refused with a reason, not quietly shortened:
     // truncating answers a question the agent did not ask, and it cannot tell.
     const long = await call(PRODUCT_TOOLS.SEARCH, { query: 'x'.repeat(schema.query.maxLength + 1) });
-    assert.equal(long.raw.isError, true);
-    assert.match(long.data.error, /query must be \d+ characters or fewer/);
-    assert.equal(long.data.received, schema.query.maxLength + 1);
+    assert.match(long.error.message, /query must be \d+ characters or fewer/);
+    assert.match(long.error.message, new RegExp('received ' + (schema.query.maxLength + 1)),
+      'the refusal states what it got, so the agent can correct it');
 
     // At the limit it is accepted, so the boundary is where it is declared.
     const atLimit = await call(PRODUCT_TOOLS.SEARCH, { query: 'x'.repeat(schema.query.maxLength) });
-    assert.equal(atLimit.raw.isError, undefined);
+    assert.equal(atLimit.error, null);
     assert.equal(el.products.length, 60);
   });
 
@@ -115,7 +127,7 @@ describe('<machvive-webmcp-products>', () => {
     // a free-text box.
     withJsonLd(JSON.stringify({ '@type': 'Product', name: 'Bare', sku: 'B-1' }));
     await mount();
-    const schema = named(PRODUCT_TOOLS.SEARCH).inputSchema.properties;
+    const schema = (await named(PRODUCT_TOOLS.SEARCH)).inputSchema.properties;
     assert.equal(schema.category.enum, undefined);
     assert.equal(schema.brand.enum, undefined);
   });
@@ -248,8 +260,8 @@ describe('variant products through the tools', () => {
     // product matches" for an identifier the page publishes is a bad miss.
     withJsonLd(GROUP);
     await mount();
-    const { raw, data } = await call(PRODUCT_TOOLS.GET, { id: 'TR-M-11-BLK' });
-    assert.ok(!raw.isError, JSON.stringify(data));
+    const { data, error } = await call(PRODUCT_TOOLS.GET, { id: 'TR-M-11-BLK' });
+    assert.equal(error, null, error?.message);
     assert.equal(data.sku, 'TR-MENS');
     assert.equal(data.variants.count, 3);
   });
@@ -257,8 +269,8 @@ describe('variant products through the tools', () => {
   test('an unknown SKU is still a miss', async () => {
     withJsonLd(GROUP);
     await mount();
-    const { raw } = await call(PRODUCT_TOOLS.GET, { id: 'TR-M-99-PINK' });
-    assert.equal(raw.isError, true, 'variant matching must not match everything');
+    const { error } = await call(PRODUCT_TOOLS.GET, { id: 'TR-M-99-PINK' });
+    assert.ok(error, 'variant matching must not match everything');
   });
 });
 
@@ -283,23 +295,21 @@ describe('get_product', () => {
 
   test('an over-long id is refused with a reason', async () => {
     withJsonLd(); await mount();
-    const max = named(PRODUCT_TOOLS.GET).inputSchema.properties.id.maxLength;
-    const { raw, data } = await call(PRODUCT_TOOLS.GET, { id: 'x'.repeat(max + 1) });
-    assert.equal(raw.isError, true);
-    assert.match(data.error, /id must be \d+ characters or fewer/);
+    const max = (await named(PRODUCT_TOOLS.GET)).inputSchema.properties.id.maxLength;
+    const { error } = await call(PRODUCT_TOOLS.GET, { id: 'x'.repeat(max + 1) });
+    assert.match(error.message, /id must be \d+ characters or fewer/);
   });
 
-  test('an unknown id is an error result, not a throw', async () => {
+  test('an unknown id rejects, carrying a usable reason', async () => {
     withJsonLd(); await mount();
-    const { raw, data } = await call(PRODUCT_TOOLS.GET, { id: 'NOPE' });
-    assert.equal(raw.isError, true);
-    assert.match(data.error, /no product matches/);
+    const { error } = await call(PRODUCT_TOOLS.GET, { id: 'NOPE' });
+    assert.match(error.message, /no product matches/);
   });
 
-  test('a missing id is an error result', async () => {
+  test('a missing id rejects', async () => {
     withJsonLd(); await mount();
-    const { raw } = await call(PRODUCT_TOOLS.GET, {});
-    assert.equal(raw.isError, true);
+    const { error } = await call(PRODUCT_TOOLS.GET, {});
+    assert.ok(error);
   });
 });
 
@@ -320,7 +330,7 @@ describe('lifecycle', () => {
 
   test('read-only: it registers no tool that mutates anything', async () => {
     withJsonLd(); await mount();
-    const names = tools().map((t) => t.name);
+    const names = (await tools()).map((t) => t.name);
     for (const verb of ['add', 'buy', 'order', 'cart', 'checkout', 'update', 'delete', 'set']) {
       assert.ok(!names.some((n) => n.includes(verb)), `${verb} suggests a mutation`);
     }
@@ -330,7 +340,7 @@ describe('lifecycle', () => {
     withJsonLd();
     const first = await mount();
     const second = await mount({ 'no-tool': '' });
-    assert.equal(tools().filter((t) => t.name === PRODUCT_TOOLS.SEARCH).length, 1);
+    assert.equal((await tools()).filter((t) => t.name === PRODUCT_TOOLS.SEARCH).length, 1);
     assert.equal(second.hasAttribute('no-tool'), true);
     assert.equal(first.products.length, 4);
   });
@@ -338,21 +348,21 @@ describe('lifecycle', () => {
   test('removing the owner withdraws the tools', async () => {
     withJsonLd();
     const el = await mount();
-    assert.ok(named(PRODUCT_TOOLS.SEARCH));
+    assert.ok(await named(PRODUCT_TOOLS.SEARCH));
     el.remove();
     for (const name of Object.values(PRODUCT_TOOLS)) {
-      assert.equal(named(name), undefined, `${name} should not stay advertised`);
+      assert.equal(await named(name), undefined, `${name} should not stay advertised`);
     }
   });
 
   test('no-tool opts out and is reversible', async () => {
     withJsonLd();
     const el = await mount({ 'no-tool': '' });
-    assert.equal(named(PRODUCT_TOOLS.SEARCH), undefined);
+    assert.equal(await named(PRODUCT_TOOLS.SEARCH), undefined);
     el.removeAttribute('no-tool');
-    assert.ok(named(PRODUCT_TOOLS.SEARCH));
+    assert.ok(await named(PRODUCT_TOOLS.SEARCH));
     el.setAttribute('no-tool', '');
-    assert.equal(named(PRODUCT_TOOLS.SEARCH), undefined);
+    assert.equal(await named(PRODUCT_TOOLS.SEARCH), undefined);
   });
 
   test('load() refreshes after the page’s JSON-LD changes', async () => {

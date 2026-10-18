@@ -1,4 +1,4 @@
-import type { WebmcpToolResult } from '../machvive-webmcp-polyfill/machvive-webmcp-polyfill.js';
+/* executeTool resolves with the result JSON-serialized, so a replay does too. */
 
 /** One captured tool invocation. */
 export interface CapturedCall {
@@ -47,7 +47,7 @@ export class CallLog {
   /** Merges a previously exported log; returns how many entries were added. */
   import(json: string | { entries: CapturedCall[] }): number;
   /** Re-invokes a captured call, optionally with edited params. */
-  replay(id: string, params?: Record<string, unknown>): Promise<WebmcpToolResult>;
+  replay(id: string, params?: Record<string, unknown>): Promise<string>;
   /** Pushes one entry to window.dataLayer. */
   pushToDataLayer(id: string): boolean;
 }
@@ -61,7 +61,7 @@ export const DB_NAME: 'machvive-webmcp';
 export const STORE_NAME: 'calls';
 
 /**
- * Instruments navigator.modelContext so future registrations are captured.
+ * Instruments document.modelContext so future registrations are captured.
  * Tools registered before this runs cannot be instrumented.
  */
 export function installAnalytics(log?: CallLog): boolean;

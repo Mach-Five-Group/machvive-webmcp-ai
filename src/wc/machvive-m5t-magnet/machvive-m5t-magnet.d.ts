@@ -19,6 +19,13 @@ export class MachviveM5tMagnet extends HTMLElement {
   readonly tools: MagnetToolTier;
   /** (Re)publishes this element's tools, taking the namespace if it is free. */
   publishTools(): this;
+  /**
+   * Withdraws this element's tools while leaving it on the page, releasing the
+   * namespace for a surviving element. The counterpart to `publishTools`, and
+   * the only way to stop advertising them short of removing the element —
+   * the spec withdraws a tool through the signal its registrant holds.
+   */
+  withdrawTools(): this;
   /** The magnet definition this element bound to, once loaded. */
   readonly config: Record<string, unknown> | null;
   /** Captures observed this session. */

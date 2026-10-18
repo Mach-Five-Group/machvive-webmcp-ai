@@ -20,7 +20,13 @@ window.isSecureContext = true;
 
 for (const key of [
   'window', 'document', 'HTMLElement', 'customElements',
-  'CustomEvent', 'Event', 'CSS', 'Blob', 'URL'
+  // EventTarget must come from jsdom alongside Event. Node supplies its own,
+  // and dispatching a jsdom Event through Node's EventTarget throws
+  // "the event argument must be an instance of Event. Received an instance of
+  // Event" — the realms do not recognise each other. The polyfill extends
+  // EventTarget because the spec says `interface ModelContext : EventTarget`,
+  // so the fix belongs here, not in the component.
+  'EventTarget', 'CustomEvent', 'Event', 'CSS', 'Blob', 'URL'
 ]) {
   Object.defineProperty(globalThis, key, { value: window[key] ?? window, configurable: true, writable: true });
 }

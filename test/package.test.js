@@ -119,6 +119,48 @@ describe('bulk import', () => {
     }
   });
 
+  test('no declaration still describes the retired 6.x API', () => {
+    // Declarations drift silently: nothing fails at runtime when a .d.ts keeps
+    // describing a method the module no longer has, and the error surfaces only
+    // in a consumer's build. The spec removed all four of these names, so any
+    // mention of them in a shipped declaration is stale by definition.
+    const retired = [
+      'unregisterTool', 'provideContext', 'callTool',
+      'TOOLS_CHANGED_EVENT', 'machvive-webmcp-change', 'WebmcpToolResult'
+    ];
+    const declarations = [
+      'index.d.ts',
+      'src/wc/machvive-lorum-ipsum/machvive-lorum-ipsum.d.ts',
+      'src/wc/machvive-webmcp-polyfill/machvive-webmcp-polyfill.d.ts',
+      'src/wc/machvive-webmcp-inspect/machvive-webmcp-inspect.d.ts',
+      'src/wc/machvive-webmcp-analytics/machvive-webmcp-analytics.d.ts',
+      'src/wc/machvive-webmcp-products/machvive-webmcp-products.d.ts',
+      'src/wc/machvive-m5t-magnet/machvive-m5t-magnet.d.ts'
+    ];
+    for (const file of declarations) {
+      // Comments are stripped first: a doc comment saying *why* a name is gone
+      // is worth keeping, and only the declarations themselves are the contract.
+      const text = readFileSync(new URL(file, root), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\/\/.*$/gm, '');
+      for (const name of retired) {
+        assert.ok(!text.includes(name), `${file} still declares the retired ${name}`);
+      }
+    }
+  });
+
+  test('the polyfill declares the registry the spec defines', () => {
+    // The counterpart to the check above: removing the old names is only half
+    // the job, and a declaration missing these would compile while leaving
+    // every real call untyped.
+    const text = readFileSync(
+      new URL('src/wc/machvive-webmcp-polyfill/machvive-webmcp-polyfill.d.ts', root), 'utf8');
+    for (const name of ['registerTool', 'getTools', 'executeTool', 'AbortSignal',
+                        'TOOL_CHANGE_EVENT', 'interface Document']) {
+      assert.ok(text.includes(name), `the polyfill declaration is missing ${name}`);
+    }
+  });
+
   test('re-exports exactly what index.d.ts declares', async () => {
     const index = await import('../index.js');
     assert.deepEqual(Object.keys(index).sort(), [
@@ -132,7 +174,7 @@ describe('bulk import', () => {
       'MachviveWebmcpPolyfill',
       'MachviveWebmcpProducts',
       'PRODUCT_TOOLS',
-      'TOOLS_CHANGED_EVENT',
+      'TOOL_CHANGE_EVENT',
       'WORD_BANKS',
       'callLog',
       'collectProducts',
@@ -148,7 +190,7 @@ describe('bulk import', () => {
     const declared = readFileSync(
       new URL('index.d.ts', root), 'utf8'
     ).match(/^\s*(\w+)[,\s]*$/gm).map((s) => s.trim().replace(',', ''));
-    for (const name of ['MachviveWebmcpPolyfill', 'installWebmcpPolyfill', 'TOOLS_CHANGED_EVENT']) {
+    for (const name of ['MachviveWebmcpPolyfill', 'installWebmcpPolyfill', 'TOOL_CHANGE_EVENT']) {
       assert.ok(declared.includes(name), `index.d.ts does not declare ${name}`);
     }
   });

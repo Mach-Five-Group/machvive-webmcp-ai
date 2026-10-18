@@ -26,7 +26,7 @@ elements with Shadow DOM that work anywhere `customElements` does.
 
 | Component | Tag | What it does |
 | --- | --- | --- |
-| WebMCP polyfill | `<machvive-webmcp-polyfill>` | Shims `navigator.modelContext` so a page can expose tools to AI agents |
+| WebMCP polyfill | `<machvive-webmcp-polyfill>` | Shims `document.modelContext` so a page can expose tools to AI agents |
 | WebMCP inspector | `<machvive-webmcp-inspect>` | Lists registered tools, builds a form from each schema, runs them |
 | WebMCP analytics | `<machvive-webmcp-analytics>` | Captures every tool call for listing, editing, export, replay, and dataLayer |
 | Products | `<machvive-webmcp-products>` | Turns the page's schema.org JSON-LD into searchable, read-only tools |
@@ -44,6 +44,46 @@ and watch it discover and call the page's tools without touching the DOM. Source
 [webmcp-playground](https://github.com/Mach-Five-Group/webmcp-playground).
 
 <img width="1098" height="894" alt="m5t_machvive_ai_webmcp" src="https://github.com/user-attachments/assets/a1433ff0-f8a9-46fb-ad59-735aed155ff8" />
+
+## ⬆️ Upgrading to 7.0
+
+7.0 follows the W3C proposal as browsers actually ship it. It is a clean break:
+6.x's own additions are gone rather than deprecated, because the spec now covers
+what they were invented for.
+
+| 6.x | 7.0 | Why |
+| --- | --- | --- |
+| `navigator.modelContext` | `document.modelContext` | The `navigator` explainer is stale; Chrome 149 and Edge 150 ship it on the document |
+| `unregisterTool(name)` | `registerTool(tool, { signal })` then `controller.abort()` | Removed from the spec; the signal is the only withdrawal mechanism |
+| `provideContext({ tools })` | register each tool; abort to withdraw | Removed from the spec |
+| `mc.tools` | `await mc.getTools()` | Discovery is async and spec-defined; a sync accessor is the one thing native will not have |
+| `mc.callTool(name, params)` | `await mc.executeTool(name, input)` | Spec-defined, and it **rejects** instead of returning `{ isError: true }` |
+| returns `{ content: [{ type: 'text', text }] }` | return any JSON-serializable value | The platform serializes it; a string is passed through verbatim |
+| `{ isError: true }` | `throw` | There is no `isError` in the spec |
+| `TOOLS_CHANGED_EVENT` on `window` | `'toolchange'` on the context | `ModelContext` is an `EventTarget`; the window event was ours |
+| `description` optional | `description` **required** | It is all an agent reads when choosing a tool |
+
+Two things that bite in practice:
+
+- **Wrap `executeTool` in `try`/`catch`.** 6.x's `callTool` never threw, so code
+  that checked `result.isError` now silently stops handling failures — the
+  rejection becomes an unhandled promise rejection instead.
+- **Pass a signal to `registerTool`.** Without one the tool lives as long as the
+  document and cannot be withdrawn, which looks like a leak much later.
+
+Registering a duplicate name now rejects with `InvalidStateError` instead of
+silently replacing the existing tool.
+
+### Native Chrome
+
+The polyfill declines to install when the document already has a `registerTool`,
+so a page on Chrome 149+ (or Edge 150+) talks to the browser and your code does
+not change. The inspector and analytics components drive the registry through
+`getTools`/`executeTool`, which are spec surface, so they work against the
+native implementation too — the one exception is analytics, which must wrap
+`registerTool` on the platform object and warns if the browser refuses.
+
+Enable it for testing at `about:flags#enable-webmcp-testing`.
 
 ## ⚡ Integration with Vite (Vanilla JS)
 
@@ -92,9 +132,15 @@ Once imported, use the tags directly in your markup. Because these are vanilla W
 
 ## 🤖 WebMCP Polyfill
 
-`machvive-webmcp-polyfill` installs a `navigator.modelContext` shim following the
+`machvive-webmcp-polyfill` installs a `document.modelContext` shim following the
 [W3C WebMCP proposal](https://webmachinelearning.github.io/webmcp/docs/proposal.html),
 so a page can declare agent-callable tools before browsers ship the API natively.
+
+> **It is `document.modelContext`, not `navigator.modelContext`.** The widely-copied
+> `navigator` form comes from an earlier explainer that is now stale — Chrome 149 and
+> Edge 150 expose it on the document. Version 7.0 moved to match, and no longer
+> installs on `navigator` at all. If you are upgrading from 6.x, see
+> [Upgrading to 7.0](#-upgrading-to-70).
 
 It is a no-op when the browser already implements WebMCP, so your page always talks
 to the real implementation where one exists. Because the native API is
@@ -131,7 +177,10 @@ waiting for the element to upgrade:
 ```javascript
 import '@machfivetechchicago/machvive-webmcp-ai/webmcp-polyfill';
 
-navigator.modelContext.registerTool({
+// Hold the controller: aborting it is the only way to withdraw the tool.
+const cartTools = new AbortController();
+
+await document.modelContext.registerTool({
   name: 'add_to_cart',
   description: 'Add a product to the shopping cart',
   inputSchema: {
@@ -139,15 +188,38 @@ navigator.modelContext.registerTool({
     properties: { sku: { type: 'string', description: 'Product SKU' } },
     required: ['sku']
   },
+  annotations: { consequentialHint: true },
   execute: async ({ sku }) => {
     await cart.add(sku);
-    return { content: [{ type: 'text', text: `Added ${sku} to cart.` }] };
+    return { added: sku, items: cart.count };
   }
-});
+}, { signal: cartTools.signal });
 ```
 
-Use `unregisterTool(name)` to drop a single tool, or `provideContext({ tools })` to
-replace the whole toolset when app state changes which tools make sense.
+**`description` is required.** It is the only thing an agent reads when choosing
+between your tools, so the registry rejects a descriptor without one rather than
+publishing something no agent will pick.
+
+**Return any JSON-serializable value.** The platform serializes it on the way to
+the agent; a string comes back verbatim. Report a failure by throwing — there is
+no `isError` flag in the spec.
+
+`annotations` are advisory hints an agent uses to decide how freely to call:
+`readOnlyHint`, `consequentialHint`, `untrustedContentHint`, `debugging`.
+
+### Withdrawing a tool
+
+There is no `unregisterTool`, and no `provideContext` to replace the toolset
+wholesale — the spec removed both. Aborting the signal you registered with is the
+only way to take a tool back:
+
+```javascript
+cartTools.abort();        // withdraws every tool registered with that signal
+```
+
+A tool registered **without** a signal lasts as long as the document and can
+never be withdrawn. That is rarely what you want, so pass one unless the tool is
+genuinely permanent.
 
 ### Bridging to an agent
 
@@ -155,16 +227,21 @@ The polyfill is a registry — it has no transport. Bridge code (an extension, a
 devtools panel, a test harness) discovers tools and invokes them:
 
 ```javascript
-import { TOOLS_CHANGED_EVENT } from '@machfivetechchicago/machvive-webmcp-ai/webmcp-polyfill';
+const mc = document.modelContext;
 
-window.addEventListener(TOOLS_CHANGED_EVENT, (e) => console.log(e.detail.tools));
+// The registry is an EventTarget, and 'toolchange' is the spec's event name.
+mc.addEventListener('toolchange', async () => {
+  console.log((await mc.getTools()).map((t) => t.name));
+});
 
-const result = await navigator.modelContext.callTool('add_to_cart', { sku: 'M5T-001' });
+const result = await mc.executeTool('add_to_cart', { sku: 'M5T-001' });
 ```
 
-`navigator.modelContext.tools` returns the descriptors minus their handlers.
-`callTool` never throws: a handler that rejects comes back as
-`{ content: [...], isError: true }`.
+`getTools()` resolves with the descriptors minus their handlers, each carrying the
+`origin` that registered it. `executeTool` resolves with the result **JSON-
+serialized as a string** and *rejects* on failure — an unknown tool throws
+`NotFoundError`, and a handler's own error propagates unchanged. Wrap it in
+`try`/`catch`; it is not the never-throwing `callTool` of 6.x.
 
 ## 🔎 Inspector
 
@@ -215,7 +292,7 @@ import '@machfivetechchicago/machvive-webmcp-ai/webmcp-analytics';
 handler at registration time, so anything registered earlier is invisible to it —
 the component warns in the console when it detects this. Wrapping the handler rather
 than the caller is deliberate: it records invocations from *any* caller, including a
-native `navigator.modelContext` and real agents, neither of which route through this
+native `document.modelContext` and real agents, neither of which route through this
 library.
 
 Captured calls persist to **IndexedDB**, so a log survives reloads and is not bound
@@ -462,7 +539,7 @@ namespace, so a second element registering them would silently replace the first
 — which happens the moment a Magnet runtime mounts one while the page already
 carries its own tag. The first to claim wins, later ones warn and register
 nothing, and removing the owner hands the namespace to a survivor rather than
-stripping the page. `publishTools()` re-claims after `provideContext`.
+stripping the page. `withdrawTools()` takes them down without removing the element, and `publishTools()` asks for them back.
 
 ## 🌓 Theming
 
@@ -571,8 +648,8 @@ regression check.
 ### It publishes a tool
 
 A connected `<machvive-lorum-ipsum>` registers `generate_placeholder_text` on
-`navigator.modelContext`, so a page has something real for an agent — or the
-[inspector](#inspector) — to call before its author has written a tool of their own.
+`document.modelContext`, so a page has something real for an agent — or the
+[inspector](#-inspector) — to call before its author has written a tool of their own.
 Open the inspector, pick the tool, fill in the form, run it, and the copy on the page
 changes. That is the whole WebMCP loop, verifiable on day one.
 
@@ -594,18 +671,18 @@ Add `no-tool` to opt a block out, or to every block to publish nothing.
 <machvive-lorum-ipsum no-tool></machvive-lorum-ipsum>
 ```
 
-**If your page calls `provideContext`, publish it again afterwards.** That API
-replaces the *entire* toolset by design, so it drops anything an element registered
-when it connected. The component does not fight that — a page calling
-`provideContext` is asserting ownership of the toolset — so ask for it back:
+`withdrawTool()` takes the tool down without setting the attribute, and
+`publishTool()` brings it back — also transferring ownership to the block you
+call it on, when several are on the page:
 
 ```js
-navigator.modelContext.provideContext({ tools: myTools });
-document.querySelector('machvive-lorum-ipsum')?.publishTool();
+const block = document.querySelector('machvive-lorum-ipsum');
+block?.withdrawTool();   // stops advertising it
+block?.publishTool();    // and asks for the name back
 ```
 
-`publishTool()` also transfers ownership to the block you call it on, and
-`withdrawTool()` removes the tool without setting the attribute.
+The component does not re-register on its own when something else withdraws its
+tool. That would mean fighting whoever withdrew it, so the page asks.
 
 Because of this, importing `@machfivetechchicago/machvive-webmcp-ai/lorum-ipsum`
 installs the polyfill too. That is deliberate — a component that registers tools
@@ -618,14 +695,15 @@ Ported from the [Lorem Ipsum Generator](https://www.thescottkrause.com/devtoys/l
 
 Declarations ship with the package — no `@types/*` needed. Importing a component
 augments `HTMLElementTagNameMap`, so `querySelector` returns the real element type,
-and the polyfill declares `navigator.modelContext` plus the change event:
+and the polyfill declares `document.modelContext`:
 
 ```typescript
 import '@machfivetechchicago/machvive-webmcp-ai/webmcp-polyfill';
-import type { WebmcpToolResult } from '@machfivetechchicago/machvive-webmcp-ai';
+import type { RegisteredTool } from '@machfivetechchicago/machvive-webmcp-ai';
 
 const el = document.querySelector('machvive-lorum-ipsum'); // MachviveLorumIpsum | null
-const res: WebmcpToolResult = await navigator.modelContext.callTool('add_to_cart', { sku: 'A' });
+const tools: RegisteredTool[] = await document.modelContext.getTools();
+const res: string = await document.modelContext.executeTool('add_to_cart', { sku: 'A' });
 ```
 
 Verified against `moduleResolution: "bundler"` and `"node16"` under `--strict`.
@@ -695,17 +773,3 @@ The **[project Wiki](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki)
 ## License
 
 [Apache-2.0](LICENSE) © MachFiveTech Chicago
-
-## Native Chrome compatibility
-
-Version 6.10.3 supports Chrome's native `document.modelContext` alongside earlier
-`navigator.modelContext` implementations. The component-facing navigator facade
-forwards registration into the browser and uses abort signals for removal; it does
-not create a separate polyfill registry or provide `tools`/`callTool`. Use native
-`document.modelContext.getTools()` and `executeTool()` for discovery and invocation.
-The inspector's polyfill-only execution controls remain unavailable on native APIs.
-
-Verified with Chrome's WebMCP testing flag: native discovery, Magnet prefill, shopper
-confirmation, agent attribution, read-only removal of start, and Off removal of all
-Magnet tools. This verifies the native browser boundary; a third-party assistant's
-natural-language tool selection remains client-specific.

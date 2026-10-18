@@ -18,7 +18,7 @@
  * baking in a host would couple every consumer's upgrade cycle to where the
  * service happens to be hosted today.
  */
-import { TOOLS_CHANGED_EVENT } from '../machvive-webmcp-polyfill/machvive-webmcp-polyfill.js';
+import '../machvive-webmcp-polyfill/machvive-webmcp-polyfill.js';
 
 /**
  * Step types an agent can meaningfully pre-answer, mapped to JSON Schema.
@@ -152,6 +152,8 @@ function prefillSchema(magnet) {
  * while a page already carries its own tag is the case that makes this real.
  */
 let owner = null;
+/** The owner's registrations. Aborting withdraws every magnet_* tool at once. */
+let registration = null;
 
 /**
  * `magnet_start` opens and prefills a widget on a real person's screen. The
@@ -195,7 +197,7 @@ export class MachviveM5tMagnet extends HTMLElement {
   }
 
   disconnectedCallback() {
-    if (owner === this) for (const name of this.#registered) globalThis.navigator?.modelContext?.unregisterTool(name);
+    if (owner === this) { registration?.abort(); registration = null; }
     this.#registered = [];
     // Release the namespace so a surviving element can take it, rather than
     // leaving the page with no magnet tools because the owner went away.
@@ -230,15 +232,35 @@ export class MachviveM5tMagnet extends HTMLElement {
   /**
    * (Re)publishes this element's tools, taking the namespace if it is free.
    *
-   * Needed because `provideContext` replaces the whole toolset by design, and
-   * because an owner being removed should hand the namespace on rather than
-   * leave the page with no magnet tools.
+   * Needed because an owner being removed should hand the namespace on rather
+   * than leave the page with no magnet tools, and because a page that changed
+   * the tier or withdrew them needs a way to ask for them back.
    */
   publishTools() {
     if (!this.#magnet) return this;          // not booted yet; #boot will publish
-    if (owner === this) for (const name of this.#registered) globalThis.navigator?.modelContext?.unregisterTool(name);
+    if (owner === this) { registration?.abort(); registration = null; }
     this.#registered = [];
     this.#registerTools();
+    return this;
+  }
+
+  /**
+   * Withdraws this element's tools while leaving it on the page.
+   *
+   * The counterpart to `publishTools`. It exists because the spec removed
+   * `provideContext`: a page used to be able to clear the toolset wholesale,
+   * and an `AbortSignal` held by the registrant is now the only way to take a
+   * tool back. Without this, stopping the magnet advertising itself would mean
+   * removing the element.
+   *
+   * The namespace is released, so a surviving element may claim it.
+   */
+  withdrawTools() {
+    if (owner !== this) return this;
+    registration?.abort();
+    registration = null;
+    owner = null;
+    this.#registered = [];
     return this;
   }
 
@@ -352,30 +374,51 @@ export class MachviveM5tMagnet extends HTMLElement {
 
   #register(tool) {
     if (!TIERS[this.tools].includes(tool.name)) return;
-    globalThis.navigator?.modelContext?.registerTool(tool);
+    // Refuse rather than register without a signal. `#claim` always leaves one
+    // in place, so this is unreachable — but `signal: undefined` registers for
+    // the lifetime of the document, and a tool that can never be withdrawn is a
+    // far worse outcome than one that is missing and says so.
+    if (!registration) {
+      console.warn(`[machvive] no registration scope for ${tool.name}; not registering it.`);
+      return;
+    }
+    globalThis.document?.modelContext
+      ?.registerTool(tool, { signal: registration.signal })
+      ?.catch((error) => console.warn(`[machvive] could not register ${tool.name}:`, error.message));
     this.#registered.push(tool.name);
   }
 
   /**
    * Claims the magnet_* namespace, or declines.
    *
-   * Ownership *and* liveness: after `provideContext` the owner still points
-   * here while the registry holds nothing, and checking ownership alone would
-   * leave the page advertising no magnet tools at all.
+   * Ownership *and* liveness, because the two come apart. A withdrawn owner is
+   * still a connected element, so checking ownership alone would leave the page
+   * advertising no magnet tools at all; and owning the namespace does not mean
+   * holding a live registration, so checking ownership alone would also
+   * re-register with no signal and pin the tools for the document's lifetime.
    */
   #claim() {
-    if (owner === this) return true;
-    const tools = globalThis.navigator?.modelContext?.tools;
-    const live = Array.isArray(tools)
-      ? tools.some((t) => t.name.startsWith('magnet_'))
-      : !!owner?.#registered.length;
-    if (owner && owner.isConnected && live) {
+    // Liveness from the controller we hold. `getTools()` is async and this
+    // path is not, and a native implementation offers no synchronous view, so
+    // the registry cannot answer the question here.
+    const live = !!registration && !registration.signal.aborted;
+    // Already owning the namespace is not enough — the registration has to be
+    // live too. `publishTools` drops the controller before re-registering, and
+    // returning early here would then register with `signal: undefined`, which
+    // the spec treats as "for the lifetime of the document": the tools could
+    // never be withdrawn again, not even by removing the element.
+    if (owner === this && live) return true;
+    if (owner && owner !== this && owner.isConnected && live) {
       console.warn(
         'machvive-m5t-magnet: another element already publishes the magnet_* tools on this page; ' +
         'this one will read config but register nothing.'
       );
       return false;
     }
+    // Taking over, or re-publishing: withdraw what is outstanding first, or
+    // every name collides with itself and each registration rejects.
+    registration?.abort();
+    registration = new AbortController();
     owner = this;
     return true;
   }
@@ -487,7 +530,8 @@ export class MachviveM5tMagnet extends HTMLElement {
         'context like a campaign or source id is passed through.',
       inputSchema: schema,
       execute: (params = {}) => {
-        if (!this.#instance) return { content: [{ type: 'text', text: 'The magnet is not loaded.' }], isError: true };
+        // 7.0 reports failure as a rejection; the message is what the agent reads.
+        if (!this.#instance) throw new Error('The magnet is not loaded.');
 
         // Keys outside the declared fields are deliberately allowed through: they
         // ride the capture and land on the lead record, which is how machine
@@ -500,10 +544,9 @@ export class MachviveM5tMagnet extends HTMLElement {
           // thing for an agent to say. The prefill below drops it; rejecting it
           // here as an invalid choice would contradict that.
           if (v != null && v !== '' && opts.length && !opts.includes(v)) {
-            return {
-              content: [{ type: 'text', text: `"${v}" is not a choice for ${s.step_columns[0]}. Options: ${opts.join(' | ')}.` }],
-              isError: true
-            };
+            throw new Error(
+              `"${v}" is not a choice for ${s.step_columns[0]}. Options: ${opts.join(' | ')}.`
+            );
           }
         }
 
@@ -518,7 +561,7 @@ export class MachviveM5tMagnet extends HTMLElement {
             !['__proto__', 'constructor', 'prototype'].includes(k) && v != null && v !== '').map(([k, v]) => [k, String(v)])
         );
         if (this.#instance.open({ prefill, reset: true, source: 'agent' }) === false) {
-          return { content: [{ type: 'text', text: 'The magnet cannot start now. The visitor may have a request in progress.' }], isError: true };
+          throw new Error('The magnet cannot start now. The visitor may have a request in progress.');
         }
 
         const filled = Object.keys(prefill);
@@ -563,9 +606,6 @@ export class MachviveM5tMagnet extends HTMLElement {
       }
     });
 
-    globalThis.window?.dispatchEvent?.(new CustomEvent(TOOLS_CHANGED_EVENT, {
-      detail: { tools: globalThis.navigator?.modelContext?.tools ?? [] }
-    }));
   }
 }
 

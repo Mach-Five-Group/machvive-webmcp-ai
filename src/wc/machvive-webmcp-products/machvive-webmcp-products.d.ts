@@ -1,7 +1,7 @@
 import type { NormalizedProduct, ProductFacets } from './jsonld.js';
 
 export * from './jsonld.js';
-export { TOOLS_CHANGED_EVENT } from '../machvive-webmcp-polyfill/machvive-webmcp-polyfill.js';
+export { TOOL_CHANGE_EVENT } from '../machvive-webmcp-polyfill/machvive-webmcp-polyfill.js';
 
 export declare const PRODUCT_TOOLS: Readonly<{
   SEARCH: 'search_products';

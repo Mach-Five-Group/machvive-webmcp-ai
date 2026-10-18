@@ -6,9 +6,10 @@
  * overlay panel, and `open` to start that panel expanded.
  *
  * Importing this also installs the polyfill, since discovery (`tools`) and
- * invocation (`callTool`) are additions the bare spec does not provide.
+ * invocation now come from the spec itself — `getTools()` and `executeTool()` —
+ * so the inspector works against a native implementation, not only this polyfill.
  */
-import { TOOLS_CHANGED_EVENT } from '../machvive-webmcp-polyfill/machvive-webmcp-polyfill.js';
+import { TOOL_CHANGE_EVENT } from '../machvive-webmcp-polyfill/machvive-webmcp-polyfill.js';
 import { THEME_CSS } from '../shared/theme.js';
 
 /** Reads a form control back as the JSON type its schema calls for. */
@@ -123,7 +124,7 @@ const STYLES = `
 export class MachviveWebmcpInspect extends HTMLElement {
   #selected = null;
   #result = null;
-  #onToolsChanged = () => this.#render();
+  #onToolsChanged = () => this.#refresh();
 
   static get observedAttributes() {
     return ['floating', 'open', 'theme', 'position'];
@@ -136,15 +137,17 @@ export class MachviveWebmcpInspect extends HTMLElement {
 
   connectedCallback() {
     this.shadowRoot.innerHTML = `<style>${STYLES}</style><div id="root"></div>`;
-    globalThis.window.addEventListener(TOOLS_CHANGED_EVENT, this.#onToolsChanged);
+    // The event is on the context now, not on window — it is an EventTarget in
+    // the spec, and a native implementation never dispatched our window event.
+    this.#context?.addEventListener(TOOL_CHANGE_EVENT, this.#onToolsChanged);
     // Opt-in only: a component that silently claims a key combination on every
     // page that embeds it would be a poor guest.
     if (this.getAttribute('hotkey')) globalThis.window.addEventListener('keydown', this.#onHotkey);
-    this.#render();
+    this.#refresh();
   }
 
   disconnectedCallback() {
-    globalThis.window.removeEventListener(TOOLS_CHANGED_EVENT, this.#onToolsChanged);
+    this.#context?.removeEventListener(TOOL_CHANGE_EVENT, this.#onToolsChanged);
     globalThis.window.removeEventListener('keydown', this.#onHotkey);
   }
 
@@ -193,11 +196,28 @@ export class MachviveWebmcpInspect extends HTMLElement {
   }
 
   get #context() {
-    return globalThis.navigator?.modelContext ?? null;
+    return globalThis.document?.modelContext ?? null;
   }
 
-  get #tools() {
-    return this.#context?.tools ?? [];
+  /**
+   * Last known toolset.
+   *
+   * `getTools()` is async, so the list has to be cached and refreshed rather
+   * than read during render. That is the whole reason this component changed
+   * shape in 7.0 — and the reason it now works on a native implementation,
+   * which never had the synchronous getter the old version depended on.
+   */
+  #toolCache = [];
+
+  async #refresh() {
+    const context = this.#context;
+    if (!context?.getTools) { this.#toolCache = []; this.#render(); return; }
+    try {
+      this.#toolCache = await context.getTools();
+    } catch {
+      this.#toolCache = [];
+    }
+    this.#render();
   }
 
   #render() {
@@ -205,9 +225,10 @@ export class MachviveWebmcpInspect extends HTMLElement {
     if (!root) return;
 
     const mc = this.#context;
-    // A native modelContext has no tools/callTool — those are our additions.
-    const usable = Boolean(mc && Array.isArray(mc.tools) && typeof mc.callTool === 'function');
-    const tools = usable ? this.#tools : [];
+    // Both halves are spec surface now, so this is true against a native
+    // implementation as well as this polyfill.
+    const usable = Boolean(mc && typeof mc.getTools === 'function' && typeof mc.executeTool === 'function');
+    const tools = usable ? this.#toolCache : [];
     if (this.#selected && !tools.some((t) => t.name === this.#selected)) this.#selected = null;
     this.#selected ??= tools[0]?.name ?? null;
     const tool = tools.find((t) => t.name === this.#selected) ?? null;
@@ -217,8 +238,8 @@ export class MachviveWebmcpInspect extends HTMLElement {
         <header>WebMCP Inspector<button class="close" title="Close">&times;</button></header>
         ${
           !usable
-            ? `<div class="empty">navigator.modelContext is unavailable here.<br>
-                 <span class="hint">Needs a secure context, and tool discovery requires the machvive polyfill.</span></div>`
+            ? `<div class="empty">document.modelContext is unavailable here.<br>
+                 <span class="hint">Needs a secure context. Chrome and Edge ship it behind an origin trial; elsewhere the machvive polyfill provides it.</span></div>`
             : tools.length === 0
               ? `<div class="empty">No tools registered.</div>`
               : `<div class="body">
@@ -313,7 +334,7 @@ export class MachviveWebmcpInspect extends HTMLElement {
   }
 
   async #execute(root) {
-    const tool = this.#tools.find((t) => t.name === this.#selected);
+    const tool = this.#toolCache.find((t) => t.name === this.#selected);
     if (!tool) return;
     const props = tool.inputSchema?.properties ?? {};
     const required = new Set(tool.inputSchema?.required ?? []);
@@ -346,13 +367,13 @@ export class MachviveWebmcpInspect extends HTMLElement {
     const button = root.querySelector('.run');
     if (button) button.disabled = true;
     try {
-      const result = await this.#context.callTool(tool.name, params);
-      const text = (result?.content ?? [])
-        .map((block) => block?.text ?? JSON.stringify(block))
-        .join('\n');
-      this.#result = { text: text || JSON.stringify(result, null, 2), isError: Boolean(result?.isError) };
+      // executeTool resolves with a JSON string and rejects on failure; there
+      // is no isError flag in the spec.
+      const result = await this.#context.executeTool(tool, params);
+      let text = String(result ?? '');
+      try { text = JSON.stringify(JSON.parse(text), null, 2); } catch { /* not JSON; show it raw */ }
+      this.#result = { text, isError: false };
     } catch (err) {
-      // callTool is documented never to reject, but a native impl might.
       this.#result = { text: String(err?.message ?? err), isError: true };
     } finally {
       if (button) button.disabled = false;
