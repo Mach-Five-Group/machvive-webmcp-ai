@@ -695,3 +695,17 @@ The **[project Wiki](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki)
 ## License
 
 [Apache-2.0](LICENSE) © MachFiveTech Chicago
+
+## Native Chrome compatibility
+
+Version 6.10.3 supports Chrome's native `document.modelContext` alongside earlier
+`navigator.modelContext` implementations. The component-facing navigator facade
+forwards registration into the browser and uses abort signals for removal; it does
+not create a separate polyfill registry or provide `tools`/`callTool`. Use native
+`document.modelContext.getTools()` and `executeTool()` for discovery and invocation.
+The inspector's polyfill-only execution controls remain unavailable on native APIs.
+
+Verified with Chrome's WebMCP testing flag: native discovery, Magnet prefill, shopper
+confirmation, agent attribution, read-only removal of start, and Off removal of all
+Magnet tools. This verifies the native browser boundary; a third-party assistant's
+natural-language tool selection remains client-specific.

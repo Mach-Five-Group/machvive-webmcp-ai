@@ -91,6 +91,45 @@ class ModelContextPolyfill {
   }
 }
 
+// Current Chrome exposes document.modelContext and unregisters through abort
+// signals. Keep the legacy component-facing API while registering in the real
+// browser registry. This adapter deliberately has no polyfill tools/callTool API.
+class DocumentModelContextAdapter {
+  #context;
+  #registrations = new Map();
+  constructor(context) { this.#context = context; }
+  registerTool(tool) {
+    assertToolDescriptor(tool);
+    this.unregisterTool(tool.name);
+    const controller = new AbortController();
+    this.#registrations.set(tool.name, controller);
+    try {
+      const pending = this.#context.registerTool(tool, { signal: controller.signal });
+      Promise.resolve(pending).catch(error => {
+        if (this.#registrations.get(tool.name) === controller) this.#registrations.delete(tool.name);
+        if (!controller.signal.aborted) console.warn(`WebMCP: native registration failed for ${tool.name}`, error);
+      });
+      return pending;
+    } catch (error) {
+      this.#registrations.delete(tool.name);
+      controller.abort();
+      throw error;
+    }
+  }
+  unregisterTool(name) {
+    const controller = this.#registrations.get(name);
+    if (!controller) return false;
+    this.#registrations.delete(name);
+    controller.abort();
+    return true;
+  }
+  provideContext({ tools = [] } = {}) {
+    tools.forEach(assertToolDescriptor);
+    for (const name of this.#registrations.keys()) this.unregisterTool(name);
+    return Promise.all(tools.map(tool => this.registerTool(tool)));
+  }
+}
+
 /**
  * Installs the polyfill. No-op when the browser ships WebMCP natively, so a page
  * always talks to the real implementation where one exists.
@@ -102,6 +141,13 @@ class ModelContextPolyfill {
  */
 export function installWebmcpPolyfill({ allowInsecureContext = false } = {}) {
   if ('modelContext' in navigator) return false;
+  if (globalThis.document?.modelContext?.registerTool) {
+    Object.defineProperty(navigator, 'modelContext', {
+      value: new DocumentModelContextAdapter(document.modelContext),
+      configurable: true, enumerable: false, writable: false
+    });
+    return false;
+  }
 
   // The native API is [SecureContext], and matching it stops a page being built
   // against a surface the browser will never provide. That reasoning does not
