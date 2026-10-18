@@ -30,11 +30,11 @@ export type WebmcpToolSummary = Omit<WebmcpToolDescriptor, 'execute'>;
 
 export interface ModelContext {
   /** Adds one tool, leaving the rest of the registry intact. */
-  registerTool(tool: WebmcpToolDescriptor): void;
+  registerTool(tool: WebmcpToolDescriptor): void | Promise<void>;
   /** Removes one tool by name; returns whether it was present. */
   unregisterTool(name: string): boolean;
   /** Replaces the entire toolset. Validates before mutating. */
-  provideContext(config?: { tools?: WebmcpToolDescriptor[] }): void;
+  provideContext(config?: { tools?: WebmcpToolDescriptor[] }): void | Promise<unknown[]>;
   /** Non-standard: descriptors an agent would discover, minus handlers. */
   readonly tools: WebmcpToolSummary[];
   /** Non-standard: invokes a registered tool. Never rejects. */
@@ -54,14 +54,15 @@ export interface InstallOptions {
 }
 
 /**
- * Installs the polyfill. No-op when WebMCP is native, or when the page is not a
+ * Installs a legacy facade for document.modelContext when available (returns false).
+ * Otherwise installs the polyfill. No-op when navigator WebMCP is native, or the page is not a
  * secure context and `allowInsecureContext` is not set. Returns true only if
  * this call installed it.
  */
 export function installWebmcpPolyfill(options?: InstallOptions): boolean;
 
 export class MachviveWebmcpPolyfill extends HTMLElement {
-  registerTool(tool: WebmcpToolDescriptor): void;
+  registerTool(tool: WebmcpToolDescriptor): void | Promise<void>;
   unregisterTool(name: string): boolean | undefined;
 }
 

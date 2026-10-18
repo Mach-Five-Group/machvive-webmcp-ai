@@ -10,7 +10,10 @@ schema-typed functions — that an AI agent can call directly, instead of the ag
 reading the DOM and simulating clicks.
 
 It implements the [W3C WebMCP proposal](https://webmachinelearning.github.io/webmcp/docs/proposal.html)
-(`navigator.modelContext`), which no browser ships yet. Four components:
+through a legacy `navigator.modelContext` facade. Current Chrome exposes native
+`document.modelContext`; the facade forwards registration there and revokes with
+AbortSignal. Existing native navigator implementations remain untouched. Only
+browsers without either native API receive the registry polyfill. Components:
 
 | Tag | Purpose |
 | --- | --- |
