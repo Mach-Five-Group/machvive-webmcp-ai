@@ -761,6 +761,11 @@ Use the dynamic `import()` form shown above.
 
 ## Documentation
 
+Start with **[Enter WebMCP: The Agent of Change](https://www.machfivetech.com/knowledge-base/enter-webmcp-the-agent-of-change/)**
+for the why: what changes when an agent can call your page's interactive
+experiences rather than scrape its content, and why that is worth more than the
+copy around it.
+
 The **[project Wiki](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki)** carries the long-form material:
 
 | | |
