@@ -775,6 +775,16 @@ The **[project Wiki](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki)
 | [Machvive WebMCP Polyfill Web Component Lib](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/Machvive-WebMCP-Polyfill-Web-Component-Lib) | Full guide: the components, how they compose, adoption constraints |
 | [Magnet Integration](https://github.com/Mach-Five-Group/machvive-webmcp-ai/wiki/Magnet-Integration) | Exposing a MachFive Magnet's lead capture to agents |
 
+## More from MachFiveTech
+
+Everything we publish is listed at
+**[npmx.dev/~machfivetech](https://npmx.dev/~machfivetech)**, or on
+[npm](https://www.npmjs.com/~machfivetech) directly: this package,
+[machvive-neodigm55-ux](https://www.npmjs.com/package/@machfivetechchicago/machvive-neodigm55-ux)
+the Neodigm 55 UX components, and
+[machvive-chat-syncopation-ai](https://www.npmjs.com/package/@machfivetechchicago/machvive-chat-syncopation-ai)
+for building chat surfaces. All three are dependency-free web components.
+
 ## License
 
 [Apache-2.0](LICENSE) © MachFiveTech Chicago
